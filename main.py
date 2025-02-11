@@ -107,6 +107,8 @@ async def download_video(request: Request):
                 }
             ],
         }
+        if 'https://youtu.be' in video_url:
+            ydl_opts['cookiefile'] = "/tmp/cookies.txt"
 
         # Download the video
         with YoutubeDL(ydl_opts) as ydl:
@@ -177,9 +179,12 @@ async def video_info(url):
             "format": "best",
             "noplaylist": True,
             "skip_download": True,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            # "cookiefile": "/tmp/cookies.txt",
         }
-
+        
+        if 'https://youtu.be' in url:
+            ydl_opts['cookiefile'] = "/tmp/cookies.txt"
+        
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
