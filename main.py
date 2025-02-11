@@ -137,13 +137,16 @@ async def get_video_info(request: Request):
     """
     Fetches metadata of a Facebook video without downloading.
     """
-    body = await request.json()
-    video_url = body.get("url")
+    try:
+        body = await request.json()
+        video_url = body.get("url")
 
-    info = await video_info(video_url)
-    # if not video_url or not video_url.startswith("https://www.facebook.com"):
+        info = await video_info(video_url)
+        # if not video_url or not video_url.startswith("https://www.facebook.com"):
 
-    return JSONResponse(content={"video_info": info})
+        return JSONResponse(content={"video_info": info})
+    except Exception as ex:
+        raise HTTPException(status_code=400, detail=f"Error: {str(ex)}")
 
 
 
@@ -174,6 +177,7 @@ async def video_info(url):
             "format": "best",
             "noplaylist": True,
             "skip_download": True,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -199,4 +203,4 @@ async def video_info(url):
         }
         return video_details
     except Exception as e:
-        raise ValueError(f"Error [video_info]: {str(e)}")
+        raise ValueError(f"[video_info]: {str(e)}")
