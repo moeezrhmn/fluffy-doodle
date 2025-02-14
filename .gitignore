@@ -3,3 +3,4 @@ downloads
 venv/
 env
 data.json
+.env

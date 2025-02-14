@@ -1,78 +1,42 @@
-import urllib.parse
+# Entry point of the app
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
-import os, json, re, uuid
-import typing
-from datetime import datetime
 from yt_dlp import YoutubeDL
-import yt_dlp
-from helper_functions import (
-    is_valid_url,
+import os, json, re, uuid
+from datetime import datetime
+from pydantic import BaseModel
+import typing, urllib.parse
+from app.utils.helper import (
     cleanup_old_files,
     bytes_to_mb,
-    create_json_fileoutput,
-    generate_filename_from_url,
 )
-from video_downloader import (
-    video_format_quality
+from app.config import (
+    DOWNLOAD_DIR,
+    MAX_SIZE_LIMIT,
+    VIDEO_FORMAT_QUALITY
 )
 
+
+# routers imports
+from app.routers import user_router, tools_router
+
 app = FastAPI()
+app.include_router(user_router.router)
+app.include_router(tools_router.router)
+
 
 class VideoRequest(BaseModel):
     url: str
     
 class VideoDownloadRequest(BaseModel):
     url: str
-    format_id: typing.Optional[str] = video_format_quality
-
-DOWNLOAD_DIR='downloads'
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-MAX_SIZE_LIMIT=200
+    format_id: typing.Optional[str] = VIDEO_FORMAT_QUALITY
 
 
-
-#     try:
-#         ydl_opts = {
-#             "format": "best",
-#             "noplaylist": True
-#         }
-        
-#         with YoutubeDL(ydl_opts) as ydl:
-#             info = ydl.extract_info(request.url, download=False)
-#             # with open(f'{DOWNLOAD_DIR}/data.json', 'w') as f :
-#             #     json.dump(info, f)
-
-
-
-@app.get('/get-file/{file_name}', name='get_file')
-async def get_file(file_name: str):
-    """
-    Get a file by its name from the downloads directory.
-    """
-    import mimetypes
-    file_path = os.path.join(DOWNLOAD_DIR, file_name)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type:
-        mime_type = 'application/octet-stream'  # Fallback MIME type
-
-
-    return FileResponse(
-        file_path, 
-        # media_type='application/octet-stream',
-        # filename=file_name
-        media_type=mime_type,  # Use the correct MIME type for your video
-        headers={"Content-Disposition": f"inline; filename={file_name}"}
-    )
-
+# Root path
 @app.get('/')
 async def root():
-    return {'message':'Tools APIs'}
-
+    return {'message':'Tools APIs developed by MOEEZ UR REHMAN - [Profile: moeezrehman.dev] '}
 
 
 @app.post("/download-video")
@@ -170,6 +134,10 @@ def get_file_size(info):
             video_size = int(video_size) 
 
     return video_size
+
+
+
+
 
 
 async def video_info(url):
