@@ -3,7 +3,9 @@
 
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
-import glob, os, hashlib, math, json
+import glob, os, hashlib, math, json, requests, random
+from app import config as app_config
+
 
 
 def is_valid_url(url: str) -> bool:
@@ -53,3 +55,18 @@ def create_json_fileoutput(file_path, info):
             existing_data.update(info)  # Merge data
             json_file.seek(0)
             json.dump(existing_data, json_file, indent=4)
+
+
+def get_video_size(video_url):
+    """Fetch video size from the Content-Length header."""
+    response = requests.head(video_url) 
+    content_length = response.headers.get('Content-Length')
+    if content_length:
+        return round(int(content_length) / (1024 * 1024), 2)
+    return None
+
+
+def get_random_proxy():
+    proxy = random.choice(app_config.PROXIES)
+    return proxy
+    

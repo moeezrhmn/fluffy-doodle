@@ -1,16 +1,17 @@
 
 import instaloader, requests, os
 from urllib.parse import urlparse, parse_qs
+import math
+from app import config as app_config
+from app.utils import helper
 
 
-
-
-L = instaloader.Instaloader()
-
+os.environ['https_proxy'] = "SOCKS5://198.12.249.249:62529"
 
 def download_video(post_url, save_dir="downloads"):
     """Download Instagram video and extract its metadata"""
     
+    L = instaloader.Instaloader()
     shortcode = extract_reel_id(post_url)
     # print('shortcode: ', shortcode)
     
@@ -26,6 +27,10 @@ def download_video(post_url, save_dir="downloads"):
     likes = post.likes if post.likes else "No Likes"
     profile = post.profile if post.profile else "No Profile"
     is_reel = post.is_video and post.typename == "GraphVideo"
+
+    video_size = helper.get_video_size(video_url)
+    if video_size and video_size > app_config.MAX_SIZE_LIMIT:
+        raise ValueError(f'Max video size {app_config.MAX_SIZE_LIMIT} exceeded!')
 
     # Create directory if not exists
     # os.makedirs(save_dir, exist_ok=True)
@@ -55,10 +60,11 @@ def download_video(post_url, save_dir="downloads"):
     # print(f"Is Reel: {is_reel}")
 
     return {
-        "video_url": video_url,
-        "thumbnail_url": thumbnail_url,
-        "caption": caption,
-        'video_duration':post.video_duration,
+        "download_url": video_url,
+        "thumbnail": thumbnail_url,
+        'size':f'{video_size} MB',
+        'duration':post.video_duration,
+        "title": caption,
         "is_reel": is_reel,
         'likes':post.likes,
         'profile':post.profile,
@@ -68,13 +74,10 @@ def download_video(post_url, save_dir="downloads"):
 def extract_reel_id(post_url):
     # Parse the URL
     parsed_url = urlparse(post_url)
-    
     # Extract the path component (e.g., "/reel/DFZdkn-px3Y/")
     path = parsed_url.path
-    
     # Split the path by '/' and get the reel ID
     parts = path.strip("/").split("/")
-    
     # The reel ID is the second part (e.g., "reel/DFZdkn-px3Y" -> "DFZdkn-px3Y")
     if len(parts) >= 2 and parts[0] == "reel":
         return parts[1]

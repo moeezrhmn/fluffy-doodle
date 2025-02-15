@@ -2,6 +2,8 @@ from pytubefix import YouTube
 import requests, os, re, subprocess, json
 from typing import Tuple
 # from pytubefix.helpers import reset_cache
+from app import config as app_config
+from app.utils import helper
 
 
 
@@ -36,6 +38,9 @@ def download_video(video_url, save_dir="downloads"):
     video_stream = yt.streams.get_highest_resolution()  # Get highest quality video
     file_size = video_stream.filesize / (1024 * 1024)  # Convert to MB
 
+    if file_size > app_config.MAX_SIZE_LIMIT:
+        raise ValueError(f'Max file size {app_config.MAX_SIZE_LIMIT} exceeded!')
+
     # Create directory if not exists
     # os.makedirs(save_dir, exist_ok=True)
 
@@ -60,9 +65,9 @@ def download_video(video_url, save_dir="downloads"):
     return {
         "title": title,
         "description": description,
-        "thumbnail_url": thumbnail_url,
-        "video_url": video_stream.url,
-        "file_size": f'{file_size:.2f} MB',
+        "thumbnail": thumbnail_url,
+        "download_url": video_stream.url,
+        "size": f'{file_size:.2f} MB',
     }
 
 
