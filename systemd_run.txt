@@ -1,0 +1,40 @@
+-- open config file
+sudo nano /etc/systemd/system/fastapi.service
+
+-- Reload systemd and start FastAPI:
+sudo systemctl daemon-reload
+sudo systemctl start fastapi
+sudo systemctl enable fastapi
+
+-- Check status
+sudo systemctl status fastapi
+
+
+Add an Inbound Rule for Port 8000
+Click on Edit Inbound Rules.
+Click Add Rule.
+Set:
+Type: Custom TCP
+Port Range: 8000
+Source:
+0.0.0.0/0 (if you want public access)
+Your IP (if you want restricted access)
+Click Save Rules.
+
+
+
+== NGINX
+sudo nano /etc/nginx/sites-available/fastapi
+
+-- Create a symbolic link to sites-enabled:
+sudo ln -s /etc/nginx/sites-available/fastapi /etc/nginx/sites-enabled/
+
+-- Run
+sudo nginx -t
+
+sudo systemctl restart nginx
+
+Allow traffic on port 80 (if not already open)
+
+sudo ufw allow 80/tcp
+

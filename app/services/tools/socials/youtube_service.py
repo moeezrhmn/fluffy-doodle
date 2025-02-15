@@ -1,21 +1,34 @@
 from pytubefix import YouTube
-import requests, os, re
+import requests, os, re, subprocess, json
+from typing import Tuple
+# from pytubefix.helpers import reset_cache
+
+
 
 def download_video(video_url, save_dir="downloads"):
-    """Download YouTube video and extract its metadata"""
-
+    """Download YouTube video and extract its metadata"""    
     if "youtu.be/" in video_url:
         video_id = video_url.split("/")[-1].split("?")[0]  # Extract video ID
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # Check if URL is a valid YouTube video or Shorts link
     if not re.search(r"(youtube\.com/watch\?v=|youtube\.com/shorts/)", video_url):
         raise ValueError("Invalid YouTube video or Shorts URL!")
-
+    # po_tv = po_token_verifier()
     
-    # Load YouTube video
-    yt = YouTube(video_url)
-    # return yt
+    proxy = {
+        "http": "SOCKS5://198.12.249.249:62529",
+        "https": "SOCKS5://198.12.249.249:62529",
+        "http": "http://108.170.12.11:80",
+        "http": "http://68.188.93.171:8080",
+        "http": "http://51.254.132.238:80",
+        "https": "https://164.163.42.2:10000"
+    }
+    yt = YouTube(
+        video_url, 
+        proxies=proxy
+        # 'WEB'
+    )
+
     # Get video metadata
     title = 'No Title Found'
     description = yt.description if yt.description else 'No Description Found'
@@ -52,3 +65,42 @@ def download_video(video_url, save_dir="downloads"):
         "file_size": f'{file_size:.2f} MB',
     }
 
+
+
+
+# def po_token_verifier() -> Tuple[str, str]:
+#     token_object = generate_youtube_token()
+#     return token_object["visitorData"], token_object["poToken"]
+
+def po_token_verifier():
+    result = subprocess.run(
+        ["youtube-po-token-generator"],
+        capture_output=True,
+        text=True
+    )
+    data = json.loads(result.stdout)
+    print('PO token: ', data)
+    return data["visitorData"], data["poToken"]
+
+def generate_youtube_token() -> dict:
+    print("Generating YouTube token")
+    result = cmd("node scripts/youtube-token-generator.js")
+    data = json.loads(result.stdout)
+    print(f"Result: {data}")
+    return data
+
+
+def cmd(command, check=True, shell=True, capture_output=True, text=True):
+    """
+    Runs a command in a shell and throws an exception if the return code is non-zero.
+    """
+    print(f"Running command: {command}")  # Debugging log
+    try:
+        result = subprocess.run(command, check=check, shell=shell, capture_output=capture_output, text=text)
+        print(f"Command Output: {result.stdout}")  # Debugging log
+        return result
+    except subprocess.CalledProcessError as error:
+        print(f"Error running command: {command}")  # Debugging log
+        print(f"STDOUT: {error.stdout}")
+        print(f"STDERR: {error.stderr}")
+        raise
