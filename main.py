@@ -63,7 +63,7 @@ async def download_video(request: Request):
         ydl_opts = {
             "format": "best",
             "quiet": False,
-            "outtmpl": f"{DOWNLOAD_DIR}/{datetime.today().strftime('%Y-%m-%d')}-{str(uuid.uuid4())[:8]}_%(title)s.%(ext)s",
+            "outtmpl": f"{DOWNLOAD_DIR}/{datetime.today().strftime('%Y-%m-%d')}-{str(uuid.uuid4())[:8]}.%(ext)s",
             "postprocessors": [
                 {
                     "key": "FFmpegVideoConvertor",
@@ -91,8 +91,22 @@ async def download_video(request: Request):
         # Create a downloadable URL
         encoded_filename = urllib.parse.quote(modified_file_name)
         download_url = str(request.url_for("get_file", file_name=encoded_filename))
-
-        return JSONResponse(content={"message": "Video downloaded successfully!", "download_url": download_url})
+        response = {
+            "title": info.get("title"),
+            "duration": info.get("duration"),
+            "size": file_size,
+            "thumbnail": info.get("thumbnail"),
+            'download_url': download_url,
+            "formats": [
+                {
+                    "format_id": f["format_id"],
+                    "resolution": f.get("resolution"), 
+                    "filesize": f.get("filesize")
+                }
+                for f in info.get("formats", [])
+            ],
+        }
+        return response
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")

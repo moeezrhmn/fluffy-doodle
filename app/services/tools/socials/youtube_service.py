@@ -18,11 +18,6 @@ def download_video(video_url, save_dir="downloads"):
     # po_tv = po_token_verifier()
     
     proxy = {
-        "http": "SOCKS5://198.12.249.249:62529",
-        "https": "SOCKS5://198.12.249.249:62529",
-        "http": "http://108.170.12.11:80",
-        "http": "http://68.188.93.171:8080",
-        "http": "http://51.254.132.238:80",
         "https": "https://164.163.42.2:10000"
     }
     yt = YouTube(
