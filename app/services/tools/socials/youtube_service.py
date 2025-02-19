@@ -21,7 +21,7 @@ def download_video(video_url:str, request: Request, save_dir="downloads"):
 
     proxy = {
         # "https": "https://164.163.42.2:10000"
-        "http": 'http://' + app_config.IP2WORLD_PROXY,
+        "https": 'https://' + app_config.IP2WORLD_PROXY,
     }
 
     print(proxy) 
