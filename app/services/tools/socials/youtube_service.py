@@ -1,13 +1,15 @@
 from pytubefix import YouTube
 import requests, os, re, subprocess, json
 from typing import Tuple
+from fastapi import Request
 # from pytubefix.helpers import reset_cache
 from app import config as app_config
 from app.utils import helper
+from datetime import datetime
 
 
 
-def download_video(video_url, save_dir="downloads"):
+def download_video(video_url:str, request: Request, save_dir="downloads"):
     """Download YouTube video and extract its metadata"""    
     if "youtu.be/" in video_url:
         video_id = video_url.split("/")[-1].split("?")[0]  # Extract video ID
@@ -19,49 +21,55 @@ def download_video(video_url, save_dir="downloads"):
     
     proxy = {
         "https": "https://164.163.42.2:10000"
+        # "http": 'http://' + app_config.IP2WORLD_PROXY,
+        # "https": 'https://' + app_config.IP2WORLD_PROXY,
     }
+    print(proxy) 
     yt = YouTube(
         video_url, 
-        proxies=proxy
-        # 'WEB'
+        proxies=proxy,
+        client='WEB',
     )
 
     # Get video metadata
-    title = 'No Title Found'
+    title = yt.title if yt.title else 'No title Found'
     description = yt.description if yt.description else 'No Description Found'
     thumbnail_url = yt.thumbnail_url if yt.thumbnail_url else 'No Thumbnail Found'
-    video_stream = yt.streams.get_highest_resolution()  # Get highest quality video
-    file_size = video_stream.filesize / (1024 * 1024)  # Convert to MB
+    # video_stream = yt.streams.get_highest_resolution()  
 
+    video_stream = yt.streams.filter(progressive=True, file_extension="mp4", res="720p").first()
+    
+    if not video_stream:
+        video_stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+    if not video_stream:
+        raise ValueError("No valid video streams available for download!")
+
+
+    file_size = video_stream.filesize / (1024 * 1024)  # Convert to MB
     if file_size > app_config.MAX_SIZE_LIMIT:
         raise ValueError(f'Max file size {app_config.MAX_SIZE_LIMIT} exceeded!')
 
     # Create directory if not exists
-    # os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
 
     # # Download video
-    # video_path = os.path.join(save_dir, f"{yt.video_id}.mp4")
-    # video_stream.download(output_path=save_dir, filename=f"{yt.video_id}.mp4")
+    file_name = f"{datetime.today().strftime('%Y-%m-%d')}_{yt.video_id}.mp4"
+    video_path = os.path.join(save_dir, file_name)
+    if not os.path.exists(video_path):
+        print('start downloading')
+        # video_stream.download(output_path=save_dir, filename=file_name)
+        response = requests.get(video_stream.url, stream=True)
+        with open(video_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024):
+                f.write(chunk)
 
-    # Download thumbnail
-    # thumbnail_path = os.path.join(save_dir, f"{yt.video_id}.jpg")
-    # thumb_response = requests.get(thumbnail_url)
-    # with open(thumbnail_path, "wb") as f:
-    #     f.write(thumb_response.content)
 
-    # Print extracted information
-    # print(f"Video Title: {title}")
-    # print(f"Description: {description[:200]}...")  # Limit description preview
-    # print(f"Thumbnail URL: {thumbnail_url}")
-    # print(f"Video Size: {file_size:.2f} MB")
-    # print(f"Video url: {video_stream.url}")
-    # print(f"Thumbnail url: {thumbnail_url}")
-
+    download_url = str(request.url_for("get_file", file_name=file_name))
     return {
         "title": title,
-        "description": description,
+        "description": f"{description[:200]}...",
         "thumbnail": thumbnail_url,
-        "download_url": video_stream.url,
+        "download_url": download_url,
         "size": f'{file_size:.2f} MB',
     }
 

@@ -2,13 +2,15 @@
 import instaloader, requests, os
 from urllib.parse import urlparse, parse_qs
 import math
+from fastapi import Request
 from app import config as app_config
 from app.utils import helper
 
 
 os.environ['https_proxy'] = "SOCKS5://198.12.249.249:62529"
 
-def download_video(post_url, save_dir="downloads"):
+
+def download_video(post_url, request: Request, save_dir="downloads"):
     """Download Instagram video and extract its metadata"""
     
     L = instaloader.Instaloader()
@@ -36,15 +38,19 @@ def download_video(post_url, save_dir="downloads"):
     # os.makedirs(save_dir, exist_ok=True)
 
     # Download Video
-    # video_path = os.path.join(save_dir, f"{shortcode}.mp4")
-    # response = requests.get(video_url, stream=True)
+    file_name = f"{shortcode}.mp4"
+    video_path = os.path.join(save_dir, file_name)
+    if not os.path.exists(video_path):
+        response = requests.get(video_url, stream=True)
+        with open(video_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024):
+                f.write(chunk)
     
-    # with open(video_path, "wb") as f:
-    #     for chunk in response.iter_content(chunk_size=1024):
-    #         f.write(chunk)
+    
+    download_url = str(request.url_for("get_file", file_name=file_name))
 
     # Get video size
-    # video_size = os.path.getsize(video_path) / (1024 * 1024)  # Convert to MB
+    video_size = os.path.getsize(video_path) / (1024 * 1024)  # Convert to MB
 
     # Download Thumbnail
     # thumbnail_path = os.path.join(save_dir, f"{shortcode}.jpg")
@@ -52,15 +58,9 @@ def download_video(post_url, save_dir="downloads"):
     # with open(thumbnail_path, "wb") as f:
     #     f.write(thumb_response.content)
 
-    # Print extracted information
-    # print(f"Video downloaded: {video_url}")
-    # print(f"Thumbnail downloaded: {thumbnail_url}")
-    # print(f"Title (Caption): {caption}")
-    # print(f"Video Size: {video_size:.2f} MB")
-    # print(f"Is Reel: {is_reel}")
 
     return {
-        "download_url": video_url,
+        "download_url": download_url,
         "thumbnail": thumbnail_url,
         'size':f'{video_size} MB',
         'duration':post.video_duration,
