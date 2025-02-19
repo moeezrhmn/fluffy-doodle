@@ -18,17 +18,16 @@ def download_video(video_url:str, request: Request, save_dir="downloads"):
     if not re.search(r"(youtube\.com/watch\?v=|youtube\.com/shorts/)", video_url):
         raise ValueError("Invalid YouTube video or Shorts URL!")
     # po_tv = po_token_verifier()
-    
+
     proxy = {
-        "https": "https://164.163.42.2:10000"
-        # "http": 'http://' + app_config.IP2WORLD_PROXY,
-        # "https": 'https://' + app_config.IP2WORLD_PROXY,
+        # "https": "https://164.163.42.2:10000"
+        "http": 'http://' + app_config.IP2WORLD_PROXY,
     }
+
     print(proxy) 
     yt = YouTube(
-        video_url, 
+        video_url,
         proxies=proxy,
-        client='WEB',
     )
 
     # Get video metadata
@@ -58,10 +57,11 @@ def download_video(video_url:str, request: Request, save_dir="downloads"):
     if not os.path.exists(video_path):
         print('start downloading')
         # video_stream.download(output_path=save_dir, filename=file_name)
-        response = requests.get(video_stream.url, stream=True)
-        with open(video_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                f.write(chunk)
+        # response = requests.get(video_stream.url, stream=True)
+        # with open(video_path, "wb") as f:
+        #     for chunk in response.iter_content(chunk_size=1024):
+        #         f.write(chunk)
+        helper.download_video_parallel(video_stream.url, video_path)
 
 
     download_url = str(request.url_for("get_file", file_name=file_name))

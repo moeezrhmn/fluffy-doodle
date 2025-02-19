@@ -26,7 +26,7 @@ class VideoDownloadRequest(BaseModel):
 
 
 
-async def download_video(video_url):
+async def download_video(video_url, request: Request):
     """
     Downloads a Facebook video and returns the file stream URL.
     """
@@ -53,7 +53,7 @@ async def download_video(video_url):
                     "preferedformat": "mp4"
                 }
             ],
-            'proxy':IP2WORLD_PROXY
+            # 'proxy': 'http://' + IP2WORLD_PROXY
         }
 
         # Download the video
@@ -119,7 +119,7 @@ def video_info(url):
             "format": "best",
             "noplaylist": True,
             "skip_download": True,
-            'proxy':IP2WORLD_PROXY,
+            # 'proxy':'http://' + IP2WORLD_PROXY,
         }
         
         with YoutubeDL(ydl_opts) as ydl:

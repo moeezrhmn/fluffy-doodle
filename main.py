@@ -22,7 +22,7 @@ async def root():
 
 
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(lambda: helper.cleanup_old_files(app_config.DOWNLOAD_DIR, days=1), 'interval', hours=24, replace_existing=True)
-scheduler.start()
+# scheduler = BackgroundScheduler()
+# scheduler.add_job(lambda: helper.cleanup_old_files(app_config.DOWNLOAD_DIR, days=1), 'interval', hours=24, replace_existing=True)
+# scheduler.start()
 

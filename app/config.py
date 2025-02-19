@@ -1,8 +1,6 @@
 # App configuration
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
 
 DOWNLOAD_DIR='downloads'
 MAX_SIZE_LIMIT=50
@@ -15,4 +13,5 @@ PROXIES=[
     {"http": "https://164.163.42.2:10000", "https": "https://164.163.42.2:10000"}
 ]
 
-IP2WORLD_PROXY= os.getenv('PROXY_SERVER')
+# IP2WORLD_PROXY= os.getenv('PROXY_SERVER')
+IP2WORLD_PROXY= "downloader-zone-resi:903090@d50562158869c95b.nbd.us.ip2world.vip:6001"

@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 from datetime import datetime, timedelta
 import glob, os, hashlib, math, json, requests, random
 from app import config as app_config
+from concurrent.futures import ThreadPoolExecutor
+
 
 
 
@@ -70,3 +72,39 @@ def get_random_proxy():
     proxy = random.choice(app_config.PROXIES)
     return proxy
     
+
+
+def download_part(url, start, end, filename):
+    headers = {"Range": f"bytes={start}-{end}"}
+    response = requests.get(url, headers=headers, stream=True)
+    with open(filename, "r+b") as f:
+        f.seek(start)
+        f.write(response.content)
+
+def download_video_parallel(url, video_path, num_threads=4):
+    response = requests.head(url)
+    file_size = int(response.headers.get("content-length", 0))
+
+    part_size = file_size // num_threads
+    with open(video_path, "wb") as f:
+        f.truncate(file_size)
+
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = []
+        for i in range(num_threads):
+            start = i * part_size
+            end = (i + 1) * part_size - 1 if i != num_threads - 1 else file_size
+            futures.append(executor.submit(download_part, url, start, end, video_path))
+        
+        for future in futures:
+            future.result()
+
+
+def download_video(url, video_path, chunk_size=8192): 
+    headers = {"User-Agent": "Mozilla/5.0"}  
+    with requests.get(url, headers=headers, stream=True) as response:
+        response.raise_for_status()  
+        with open(video_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:  
+                    f.write(chunk) 

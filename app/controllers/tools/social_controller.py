@@ -45,7 +45,7 @@ async def get_user(request: Request):
         payload = await request.json()
         url = payload.get("url")
     
-        return await yt_dlp_service.download_video(url)
+        return await yt_dlp_service.download_video(url, request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
 

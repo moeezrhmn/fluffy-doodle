@@ -8,6 +8,7 @@ from app.utils import helper
 
 
 os.environ['https_proxy'] = "SOCKS5://198.12.249.249:62529"
+# os.environ['https_proxy'] = 'https://' + app_config.IP2WORLD_PROXY
 
 
 def download_video(post_url, request: Request, save_dir="downloads"):
@@ -41,10 +42,11 @@ def download_video(post_url, request: Request, save_dir="downloads"):
     file_name = f"{shortcode}.mp4"
     video_path = os.path.join(save_dir, file_name)
     if not os.path.exists(video_path):
-        response = requests.get(video_url, stream=True)
-        with open(video_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                f.write(chunk)
+        # response = requests.get(video_url, stream=True)
+        # with open(video_path, "wb") as f:
+        #     for chunk in response.iter_content(chunk_size=1024):
+        #         f.write(chunk)
+        helper.download_video(video_url, video_path)
     
     
     download_url = str(request.url_for("get_file", file_name=file_name))
