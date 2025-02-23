@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import glob, os, hashlib, math, json, requests, random
 from app import config as app_config
 from concurrent.futures import ThreadPoolExecutor
-
+from tqdm import tqdm
 
 
 
@@ -59,10 +59,11 @@ def create_json_fileoutput(file_path, info):
             json.dump(existing_data, json_file, indent=4)
 
 
-def get_video_size(video_url):
+def get_video_size(video_url, proxies=None):
     """Fetch video size from the Content-Length header."""
-    response = requests.head(video_url) 
+    response = requests.head(video_url, proxies=proxies) 
     content_length = response.headers.get('Content-Length')
+    print('content-length: ', content_length)
     if content_length:
         return round(int(content_length) / (1024 * 1024), 2)
     return None
@@ -73,38 +74,79 @@ def get_random_proxy():
     return proxy
     
 
+def download_part(url, start, end, filename, proxies=None):
+    headers = {"Range": f"bytes={start}-{end}", "User-Agent": "Mozilla/5.0"}
+    
+    try:
+        response = requests.get(url, headers=headers, stream=True, proxies=proxies, timeout=30)
+        response.raise_for_status()
 
-def download_part(url, start, end, filename):
-    headers = {"Range": f"bytes={start}-{end}"}
-    response = requests.get(url, headers=headers, stream=True)
-    with open(filename, "r+b") as f:
-        f.seek(start)
-        f.write(response.content)
+        # Write content to file with proper thread safety
+        if response.status_code in [200, 206]:  # 206 = Partial Content
+            with open(filename, "r+b") as f:
+                f.seek(start)
+                f.write(response.content)
+        else:
+            print(f"Failed to download part {start}-{end}. Status code: {response.status_code}")
 
-def download_video_parallel(url, video_path, num_threads=4):
-    response = requests.head(url)
-    file_size = int(response.headers.get("content-length", 0))
+    except Exception as e:
+        print(f"Error downloading part {start}-{end}: {e}")
 
-    part_size = file_size // num_threads
-    with open(video_path, "wb") as f:
-        f.truncate(file_size)
+def download_video_parallel(url, video_path, num_threads=4, proxies=None):
+    try:
+        response = requests.get(url, proxies=proxies, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        file_size = int(response.headers.get("content-length", 0))
 
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = []
-        for i in range(num_threads):
-            start = i * part_size
-            end = (i + 1) * part_size - 1 if i != num_threads - 1 else file_size
-            futures.append(executor.submit(download_part, url, start, end, video_path))
-        
-        for future in futures:
-            future.result()
+        if file_size == 0:
+            print("Failed to get content length from the server.")
+            return
 
+        part_size = file_size // num_threads
 
-def download_video(url, video_path, chunk_size=8192): 
-    headers = {"User-Agent": "Mozilla/5.0"}  
-    with requests.get(url, headers=headers, stream=True) as response:
-        response.raise_for_status()  
+        # Pre-allocate the file with the expected size
         with open(video_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:  
-                    f.write(chunk) 
+            f.truncate(file_size)
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = []
+            for i in range(num_threads):
+                start = i * part_size
+                # Ensure the last part covers up to the last byte
+                end = (i + 1) * part_size - 1 if i < num_threads - 1 else file_size - 1
+                
+                futures.append(executor.submit(download_part, url, start, end, video_path, proxies))
+            
+            for future in futures:
+                future.result()
+
+        print("Parallel download completed successfully.")
+
+    except Exception as e:
+        print(f"Error during parallel download: {e}")
+
+# def download_video(url, video_path, chunk_size=8192, proxies=None):   
+#     response = requests.get(url, stream=True, proxies=proxies)
+#     with open(video_path, "wb") as f:
+#         for chunk in response.iter_content(chunk_size=chunk_size):
+#             print(f'downloading video. Chunk: {chunk_size} ')
+#             f.write(chunk)
+
+def download_video(url, video_path, chunk_size=8192, proxies=None):
+    response = requests.get(url, stream=True, proxies=proxies)
+    total_size = int(response.headers.get('content-length', 0))
+
+    # Show progress bar
+    with open(video_path, "wb") as f, tqdm(
+        desc="Downloading Video",
+        total=total_size,
+        unit='B',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as progress_bar:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                f.write(chunk)
+                progress_bar.update(len(chunk))
+
+    print("Download completed!")

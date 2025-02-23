@@ -1,11 +1,13 @@
 from fastapi import Request, HTTPException
 from yt_dlp import YoutubeDL
-import os, json, re, uuid
+import os, json, re, uuid, math
 from datetime import datetime
 from pydantic import BaseModel
 import typing, urllib.parse
 from app.utils.helper import (
     bytes_to_mb,
+    get_video_size,
+    create_json_fileoutput
 )
 from app.config import (
     DOWNLOAD_DIR,
@@ -37,77 +39,50 @@ async def download_video(video_url, request: Request):
 
     try:
         v_info = video_info(video_url)
-        file_size = bytes_to_mb(v_info['size'])
-        
-        if file_size > MAX_SIZE_LIMIT:
+
+        if v_info['size_in_mb'] > MAX_SIZE_LIMIT:
             raise HTTPException(status_code=400, detail=f"File size exceeds {MAX_SIZE_LIMIT} MB limit.")
         
 
         ydl_opts = {
-            "format": "best",
-            "quiet": False,
+            'proxy': IP2WORLD_PROXY,
+            "format": 'best',
+            # "quiet": False,
             "outtmpl": f"{DOWNLOAD_DIR}/{datetime.today().strftime('%Y-%m-%d')}-{str(uuid.uuid4())[:8]}.%(ext)s",
-            "postprocessors": [
-                {
-                    "key": "FFmpegVideoConvertor",
-                    "preferedformat": "mp4"
-                }
-            ],
-            # 'proxy': 'http://' + IP2WORLD_PROXY
+            'progress_hooks': [lambda d: print(f"Status: {d['status']}, Downloaded: {d.get('downloaded_bytes', 0)} bytes")],
+            # "postprocessors": [
+            #     {
+            #         "key": "FFmpegVideoConvertor",
+            #         "preferedformat": "mp4"
+            #     }
+            # ],
         }
 
         # Download the video
         with YoutubeDL(ydl_opts) as ydl:
+            print('Start Downloader: ⏳⏳')
             info = ydl.extract_info(video_url, download=True)
             file_path = ydl.prepare_filename(info)
+            print('Start Downloader: ⏳⏳')
 
+            print('file_path: ', file_path)
             # Process file name
             file_name = os.path.basename(file_path)
-            modified_file_name = file_name.lower().replace(" ", "-")
-            modified_file_name = re.sub(r"[^a-z0-9\-\.]", "", modified_file_name)
-            new_file_path = os.path.join(DOWNLOAD_DIR, modified_file_name)
+ 
 
-            # Rename file
-            os.rename(file_path, new_file_path)
-
-        # Create a downloadable URL
-        encoded_filename = urllib.parse.quote(modified_file_name)
-        download_url = str(request.url_for("get_file", file_name=encoded_filename))
+        download_url = str(request.url_for("get_file", file_name=file_name))
         response = {
             "title": info.get("title"),
             "duration": info.get("duration"),
-            "size": file_size,
+            "size_in_mb": v_info['size_in_mb'],
+            "size": v_info['size'],
             "thumbnail": info.get("thumbnail"),
             'download_url': download_url,
-            "formats": [
-                {
-                    "format_id": f["format_id"],
-                    "resolution": f.get("resolution"), 
-                    "filesize": f.get("filesize")
-                }
-                for f in info.get("formats", [])
-            ],
         }
         return response
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
-
-
-
-def get_file_size(info):
-    import requests
-    formats = info.get("formats", [])
-    file_sizes = [f.get("filesize") for f in formats if f.get("filesize")]
-    video_size = max(file_sizes) if file_sizes else None
-
-    if not video_size:
-        response = requests.head(info["url"], allow_redirects=True)
-        video_size = response.headers.get("Content-Length")
-        if video_size:
-            video_size = int(video_size) 
-
-    return video_size
+        raise HTTPException(status_code=400, detail=f"Error {str(e)}")
 
 
 
@@ -116,32 +91,31 @@ def video_info(url):
     try:
         ydl_opts = {
             "quiet": True,
-            "format": "best",
+            'proxy':IP2WORLD_PROXY,
+            "format": 'best',
+            #   VIDEO_FORMAT_QUALITY,
             "noplaylist": True,
-            "skip_download": True,
-            # 'proxy':'http://' + IP2WORLD_PROXY,
+            "list-formats": True
         }
-        
         with YoutubeDL(ydl_opts) as ydl:
+            print('Starting scraping ⌛⌛')
             info = ydl.extract_info(url, download=False)
+            print('Scraping Completed ✅')
+
+        
+        selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
+        file_size = selected_format.get("filesize", 0) if selected_format else 0
+        file_size_mb = round(file_size / (1024 * 1024), 2)
 
         # file_path = "data.json"
         # create_json_fileoutput(file_path, info)
 
-        file_size = get_file_size(info)
         video_details = {
             "title": info.get("title"),
             "duration": info.get("duration"),
             "size": file_size,
+            "size_in_mb": file_size_mb,
             "thumbnail": info.get("thumbnail"), 
-            # "formats": [
-            #     {
-            #         "format_id": f["format_id"],
-            #         "resolution": f.get("resolution"), 
-            #         "filesize": f.get("filesize")
-            #     }
-            #     for f in info.get("formats", [])
-            # ],
         }
         return video_details
     except Exception as e:
