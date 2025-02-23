@@ -96,6 +96,7 @@ def video_info(url):
             "http_chunk_size": 1048576,  
             "retries": 3, 
             "timeout": 60,
+            'cookies':'/var/www/fluffy-doodle/yt_cookies.txt'
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             print('[video_info] Starting scraping ⌛⌛')

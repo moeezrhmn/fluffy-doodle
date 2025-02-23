@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Request
-from app.services.tools.socials import instagram_service, youtube_service, facebook_service, yt_dlp_service
+from app.services.tools.socials import instagram_service, youtube_service, facebook_service, x_service, yt_dlp_service
 from fastapi import HTTPException
 import traceback
 from app import config as  app_config
@@ -56,6 +56,20 @@ async def facebook_dowbload(request: Request):
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[facebook] ' , (e) , '\n ' , tb)
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+
+# X videos download
+@router.post("/tools/social/x-twitter/video-download")
+async def facebook_dowbload(request: Request):
+    
+    payload = await request.json()
+    url = payload.get("url")
+    try:
+    
+        return x_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+    except Exception as e:
+        tb = traceback.format_exc()
+        print('Error:[X(twitter)] ' , (e) , '\n ' , tb)
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
 
 
