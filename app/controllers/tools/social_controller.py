@@ -30,12 +30,12 @@ async def youtube_download(request: Request):
     
     payload = await request.json()
     url = payload.get("url")
-    if not url or not url.startswith("https://youtube.com") and not url.startswith("https://youtu.be") and not url.startswith('https://www.youtube.com'):
+    if not url or 'youtube.com' not in url and 'youtu.be' not in url:
         raise HTTPException(status_code=400, detail="Invalid or missing Youtube URL.")
     
     try:
     
-        return youtube_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+        return await youtube_service.download_video(url, request, app_config.DOWNLOAD_DIR)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube] ' , (e) , '\n ' , tb)
@@ -47,12 +47,12 @@ async def facebook_dowbload(request: Request):
     
     payload = await request.json()
     url = payload.get("url")
-    if not url or not url.startswith("https://facebook.com") and not url.startswith('https://www.facebook.com'):
+    if not url or 'facebook.com' not in url:
         raise HTTPException(status_code=400, detail="Invalid or missing Facebook URL.")
     
     try:
     
-        return facebook_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+        return await facebook_service.download_video(url, request, app_config.DOWNLOAD_DIR)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[facebook] ' , (e) , '\n ' , tb)
@@ -66,7 +66,7 @@ async def facebook_dowbload(request: Request):
     url = payload.get("url")
     try:
     
-        return x_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+        return await x_service.download_video(url, request, app_config.DOWNLOAD_DIR)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[X(twitter)] ' , (e) , '\n ' , tb)

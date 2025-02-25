@@ -1,5 +1,5 @@
 import yt_dlp
-import requests, os, re, subprocess, json, uuid
+import requests, os, re, subprocess, json, uuid, asyncio
 from typing import Tuple
 from fastapi import Request, HTTPException
 # from pytubefix.helpers import reset_cache
@@ -69,14 +69,14 @@ sticky_proxies = {"http": app_config.IP2WORLD_STICKY_PROXY, "https": app_config.
 #         "size": f'{file_size:.2f} MB',
 #     }
 
-def download_video(video_url:str, request: Request, save_dir="downloads"):
+async def download_video(video_url:str, request: Request, save_dir="downloads"):
 
     try:
         video_id = extract_youtube_video_id(video_url)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         print({'video_url':video_url, 'video_id':video_id,})
 
-        v_info = video_info(video_url)
+        v_info = await video_info(video_url)
         return v_info
 
     except Exception as e:
@@ -84,10 +84,11 @@ def download_video(video_url:str, request: Request, save_dir="downloads"):
 
 
 
-def video_info(url):
+async def video_info(url):
     try:
         ydl_opts = {
             "quiet": True,
+            'nocheckcertificate': True,
             'proxy':app_config.IP2WORLD_PROXY,
             "format": 'best',
             "noplaylist": True,
@@ -98,18 +99,23 @@ def video_info(url):
             "timeout": 60,
             'cookies':'/var/www/fluffy-doodle/yt_cookies.txt'
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print('[video_info] Starting scraping ⌛⌛')
-            info = ydl.extract_info(url, download=False)
-            print('[video_info] Scraping Completed ✅')
+        def extract_info_async(url, ydl_opts):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                print('[video_info] Starting scraping ⌛⌛')
+                return ydl.extract_info(url, download=False)
+        
+        info = await asyncio.wait_for(asyncio.to_thread(extract_info_async, url, ydl_opts), timeout=60)
+        print('[video_info] Scraping Completed ✅')
+
+        # with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        #     print('[video_info] Starting scraping ⌛⌛')
+        #     info = ydl.extract_info(url, download=False)
+        #     print('[video_info] Scraping Completed ✅')
 
         
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
         file_size_mb = round(file_size / (1024 * 1024), 2)
-
-        # file_path = "data.json"
-        # create_json_fileoutput(file_path, info)
 
         video_details = {
             "title": info.get("title"),
