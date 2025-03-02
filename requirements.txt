@@ -76,4 +76,4 @@ uvloop==0.21.0
 watchfiles==1.0.4
 websockets==14.1
 WMI==1.4.9
-yt-dlp==2025.1.26
+yt-dlp==2025.2.19

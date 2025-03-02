@@ -19,6 +19,7 @@ google-api-core==2.24.1
 google-auth==2.38.0
 googleapis-common-protos==1.66.0
 greenlet==3.1.1
+gunicorn==23.0.0
 h11==0.14.0
 httpcore==1.0.7
 httplib2==0.22.0
@@ -77,4 +78,4 @@ uvloop==0.21.0
 watchfiles==1.0.4
 websockets==14.1
 WMI==1.4.9
-yt-dlp==2025.1.26
+yt-dlp==2025.2.19
