@@ -100,10 +100,6 @@ async def video_info(url):
             "retries": 3, 
             "timeout": 60,
             'cookies-from-browser': 'chrome',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.110 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-            }
             # 'cookies':'/var/www/fluffy-doodle/yt_cookies.txt'
         }
         def extract_info_async(url, ydl_opts):
