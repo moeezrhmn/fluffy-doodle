@@ -18,6 +18,6 @@ VALID_VIDEO_DOMAINS = re.compile(r"^(https?:\/\/)?(www\.)?"
 
 # IP2WORLD_PROXY= os.getenv('PROXY_SERVER')
 IP2WORLD_PROXY= "http://downloader-zone-resi:903090@d50562158869c95b.nbd.us.ip2world.vip:6001"
-IP2WORLD_STICKY_PROXY= "http://downloader-zone-resi-session-824748218ed0-sessTime-5:903090@d50562158869c95b.gfh.de.ip2world.vip:6001"
+IP2WORLD_STICKY_PROXY= "http://downloader-zone-resi-session-d09ecace1ed0-sessTime-1:903090@d50562158869c95b.gfh.de.ip2world.vip:6001"
 # IP2WORLD_PROXY = "http://downloader-zone-resi:903090@d50562158869c95b.gfh.de.ip2world.vip:6001"
 # proxy_url = "http://downloader-zone-resi:903090@pr.ip2world.com:6001"

@@ -1,8 +1,10 @@
-# Pydantic schemas
+from sqlalchemy import Column, Integer, String
+from app.database import Base
 
-from pydantic import BaseModel
+class User(Base):
+    __tablename__ = "users"
 
-class User(BaseModel):
-    id: int
-    name: str
-    email: str
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)

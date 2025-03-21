@@ -34,14 +34,15 @@ async def video_info(url):
             'nocheckcertificate': True,
             'proxy':app_config.IP2WORLD_PROXY,
             "format": 'best',
-            "noplaylist": True,
             "list-formats": True,
             "socket_timeout": 30, 
             "http_chunk_size": 1048576,  
             "retries": 3, 
             "timeout": 60,
-            'cookies':'/var/www/fluffy-doodle/X_cookies.txt'
+            'extractor_args': {'twitter': {'api': ['legacy']}}, # syndication
+            # 'cookies':'/var/www/fluffy-doodle/X_cookies.txt'
         }
+        # "User-Agent: python-requests/2.32.3"
 
         def extract_info_async(url, ydl_opts):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -58,7 +59,7 @@ async def video_info(url):
         
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
-        file_size_mb = round(file_size / (1024 * 1024), 2)
+        file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
 
         video_details = {
             "title": info.get("title"),
@@ -72,7 +73,5 @@ async def video_info(url):
         return video_details
     except Exception as e:
         raise ValueError(f"[video_info]: {str(e)}")
-
-
 
 

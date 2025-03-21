@@ -26,7 +26,7 @@ async def video_info(url):
         ydl_opts = {
             "quiet": True,
             'nocheckcertificate': True,
-            'proxy':app_config.IP2WORLD_PROXY,
+            'proxy':app_config.IP2WORLD_STICKY_PROXY,
             "format": 'best',
             "noplaylist": True,
             "list-formats": True,
@@ -53,7 +53,7 @@ async def video_info(url):
         
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
-        file_size_mb = round(file_size / (1024 * 1024), 2)
+        file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
 
         video_details = {
             "title": info.get("title"),

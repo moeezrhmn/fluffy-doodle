@@ -91,15 +91,16 @@ async def video_info(url):
         ydl_opts = {
             "quiet": True,
             'nocheckcertificate': True,
-            'proxy':app_config.IP2WORLD_PROXY,
-            "format": 'best[ext=mp4]/best',
+            'proxy':app_config.IP2WORLD_STICKY_PROXY,
+            "format": 'best',
             "noplaylist": True,
             "list-formats": True,
             "socket_timeout": 30, 
             "http_chunk_size": 1048576,  
             "retries": 3, 
             "timeout": 60,
-            'cookies-from-browser': 'chrome',
+            'extractor_args': {'twitter': {'api': ['legacy']}},
+            # 'cookies-from-browser': 'chrome',
             # 'cookies':'/var/www/fluffy-doodle/yt_cookies.txt'
         }
         def extract_info_async(url, ydl_opts):
@@ -118,7 +119,7 @@ async def video_info(url):
         
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
-        file_size_mb = round(file_size / (1024 * 1024), 2)
+        file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
         video_details = {
             "title": info.get("title"),
             "duration": info.get("duration"),
@@ -139,3 +140,41 @@ def extract_youtube_video_id(url: str) -> str:
     if match:
         return match.group(1)
     return url
+
+
+def get_audio_url(video_url):
+    try:
+        video_id = extract_youtube_video_id(video_url)
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        print({'video_url':video_url, 'video_id':video_id,})
+
+        ydl_opts = {
+            'format': 'bestaudio/best', 
+            'proxy':app_config.IP2WORLD_STICKY_PROXY,
+            'quiet': True, 
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(video_url, download=False)
+                audio_url = info.get('url')
+
+                audio_details = {
+                    "title": info.get("title"),
+                    "duration": info.get("duration"),
+                    "size": None,
+                    "size_in_mb": None,
+                    "thumbnail": info.get("thumbnail"), 
+                    'audio_url':audio_url,
+                    'download_url':info['url'],
+                }
+                return audio_details
+
+            except Exception as e:
+                print(f"Error: {e}")
+                return None
+
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error {str(e)}")
+

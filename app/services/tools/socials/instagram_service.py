@@ -59,13 +59,8 @@ from app.utils import helper
 
 
 
-
-
-
-
-
 # os.environ['https_proxy'] = "SOCKS5://198.12.249.249:62529"
-os.environ['https_proxy'] = app_config.IP2WORLD_PROXY
+os.environ['https_proxy'] = app_config.IP2WORLD_STICKY_PROXY
 
 
 def download_video(post_url, request: Request, save_dir="downloads"):
@@ -74,7 +69,7 @@ def download_video(post_url, request: Request, save_dir="downloads"):
         L = instaloader.Instaloader()
         shortcode = extract_reel_id(post_url)
         # print('shortcode: ', shortcode)
-        
+
         post = instaloader.Post.from_shortcode(L.context, shortcode)
 
         if not post.is_video:
@@ -102,7 +97,7 @@ def download_video(post_url, request: Request, save_dir="downloads"):
 
         return video_details
     except Exception as ex:
-        raise ValueError(f"[instaloader]: {str(ex)}")
+        raise ValueError(f"[instagram][video can be age restricted require login to download]: {str(ex)}")
 
     # Download Video
     # file_name = f"{shortcode}.mp4"
@@ -119,8 +114,6 @@ def download_video(post_url, request: Request, save_dir="downloads"):
 
     # Get video size
     # video_size = os.path.getsize(video_path) / (1024 * 1024)  # Convert to MB
-
-
 
 
 
