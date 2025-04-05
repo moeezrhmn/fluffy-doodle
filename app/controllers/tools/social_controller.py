@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from app.services.tools.socials import instagram_service, youtube_service, facebook_service, x_service, yt_dlp_service
+from app.services.tools.socials import instagram_service, youtube_service, facebook_service, x_service, yt_dlp_service, vk_service
 from fastapi import HTTPException
 from app.utils.auth import authorize_user
 import traceback
@@ -89,6 +89,21 @@ async def facebook_dowbload(request: Request, auth_data: dict = Depends(authoriz
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[X(twitter)] ' , (e) , '\n ' , tb)
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+
+
+# VK videos download
+@router.post("/tools/social/vk/video-download")
+async def vk_dowbload(request: Request, auth_data: dict = Depends(authorize_user)):
+    
+    payload = await request.json()
+    url = payload.get("url")
+    try:
+    
+        return await vk_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+    except Exception as e:
+        tb = traceback.format_exc()
+        print('Error:[VK platform] ' , (e) , '\n ' , tb)
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
 
 

@@ -5,61 +5,6 @@ from fastapi import Request, HTTPException
 from app import config as app_config
 from app.utils import helper
 
-
-
-
-# def download_video(video_url, request: Request, save_dir="downloads"):
-
-#     try:
-#         print({'video_url':video_url})
-
-#         v_info = video_info(video_url)
-#         return v_info
-
-#     except Exception as e:
-#         raise HTTPException(status_code=400, detail=f"Error {str(e)}")
-
-
-
-# def video_info(url):
-#     try:
-#         ydl_opts = {
-#             "quiet": True,
-#             'proxy':app_config.IP2WORLD_PROXY,
-#             "format": 'best',
-#             "noplaylist": True,
-#             "list-formats": True,
-#             "socket_timeout": 30, 
-#             "http_chunk_size": 1048576,  
-#             "retries": 3, 
-#             "timeout": 60,
-#         }
-#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-#             print('[video_info] Starting scraping ⌛⌛')
-#             info = ydl.extract_info(url, download=False)
-#             print('[video_info] Scraping Completed ✅')
-
-        
-#         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
-#         file_size = selected_format.get("filesize", 0) if selected_format else 0
-#         file_size_mb = round(file_size / (1024 * 1024), 2)
-
-#         video_details = {
-#             "title": info.get("title"),
-#             "duration": info.get("duration"),
-#             "size": file_size,
-#             "size_in_mb": file_size_mb,
-#             "thumbnail": info.get("thumbnail"), 
-#             'url':info['url'],
-#             'download_url':info['url'],
-#         }
-#         return video_details
-#     except Exception as e:
-#         raise ValueError(f"[video_info]: {str(e)}")
-
-
-
-# os.environ['https_proxy'] = "SOCKS5://198.12.249.249:62529"
 os.environ['https_proxy'] = app_config.IP2WORLD_STICKY_PROXY
 
 

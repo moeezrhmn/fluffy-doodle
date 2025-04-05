@@ -9,7 +9,7 @@ router = APIRouter(prefix="/temp-mail", tags=["Temp Mail"])
 @router.get("/generate-new-email")
 async def generate_new_email():
     email = get_new_email()
-    return {"email": email}
+    return {"email": email, "ttl": get_email_ttl(email)}
 
 
 

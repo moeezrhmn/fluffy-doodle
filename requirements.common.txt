@@ -88,6 +88,6 @@ urllib3==2.3.0
 uvicorn==0.34.0
 websockets==14.1
 WMI==1.4.9
-yt-dlp==2025.2.19
+yt-dlp==2025.3.31
 redis==5.2.1
 IMAPClient==3.0.1

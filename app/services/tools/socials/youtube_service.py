@@ -155,24 +155,27 @@ def get_audio_url(video_url):
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(video_url, download=False)
-                audio_url = info.get('url')
+            info = ydl.extract_info(video_url, download=False)
 
-                audio_details = {
-                    "title": info.get("title"),
-                    "duration": info.get("duration"),
-                    "size": None,
-                    "size_in_mb": None,
-                    "thumbnail": info.get("thumbnail"), 
-                    'audio_url':audio_url,
-                    'download_url':info['url'],
-                }
-                return audio_details
+            if 'entries' in info:
+                # Extract the first video entry
+                info = info['entries'][0]
 
-            except Exception as e:
-                print(f"Error: {e}")
-                return None
+            audio_url = info.get('url')
+            if not audio_url:
+                raise ValueError("Audio URL not found in the extracted information.")
+
+            audio_details = {
+                "title": info.get("title"),
+                "duration": info.get("duration"),
+                "size": None,
+                "size_in_mb": None,
+                "thumbnail": info.get("thumbnail"),
+                'audio_url': audio_url,
+                'download_url': audio_url,
+            }
+            return audio_details
+
 
 
     except Exception as e:

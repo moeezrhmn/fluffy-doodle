@@ -1,6 +1,18 @@
 # App configuration
+from dotenv import load_dotenv
 import os, re
 
+load_dotenv()
+
+
+class Settings():
+    
+    IP2WORLD_PROXY: str = os.getenv('IP2WORLD_PROXY')
+    IP2WORLD_STICKY_PROXY: str = os.getenv('IP2WORLD_STICKY_PROXY')    
+
+
+
+settings = Settings()
 
 DOWNLOAD_DIR='downloads'
 MAX_SIZE_LIMIT=50
@@ -16,8 +28,5 @@ PROXIES=[
 VALID_VIDEO_DOMAINS = re.compile(r"^(https?:\/\/)?(www\.)?"
                                 r"(facebook\.com|fb\.watch|instagram\.com|instagr\.am|youtube\.com|youtu\.be)", re.IGNORECASE)
 
-# IP2WORLD_PROXY= os.getenv('PROXY_SERVER')
-IP2WORLD_PROXY= "http://downloader-zone-resi:903090@d50562158869c95b.nbd.us.ip2world.vip:6001"
-IP2WORLD_STICKY_PROXY= "http://downloader-zone-resi-session-d09ecace1ed0-sessTime-1:903090@d50562158869c95b.gfh.de.ip2world.vip:6001"
-# IP2WORLD_PROXY = "http://downloader-zone-resi:903090@d50562158869c95b.gfh.de.ip2world.vip:6001"
-# proxy_url = "http://downloader-zone-resi:903090@pr.ip2world.com:6001"
+IP2WORLD_PROXY= settings.IP2WORLD_PROXY
+IP2WORLD_STICKY_PROXY= settings.IP2WORLD_STICKY_PROXY

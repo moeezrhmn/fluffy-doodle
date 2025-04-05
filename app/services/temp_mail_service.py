@@ -38,6 +38,9 @@ def get_email_ttl(email: str) -> int:
 def fetch_emails(email: str):
     """Fetch emails from the inbox of the provided email address"""
     try:
+        if not is_email_valids(email):
+            raise Exception("Email not found")
+
         imap_server = imapclient.IMAPClient('imap.hostinger.com', ssl=True)
         imap_server.login(TEMP_MAIL_USERNAME, TEMP_MAIL_PASSWORD)
 
