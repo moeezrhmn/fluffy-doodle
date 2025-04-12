@@ -27,7 +27,7 @@ async def video_info(url):
         ydl_opts = {
             "quiet": True,
             "nocheckcertificate": True,
-            "proxy": app_config.IP2WORLD_PROXY,
+            # "proxy": app_config.IP2WORLD_PROXY,
             "format": "best",
             "list-formats": True,
             "socket_timeout": 30,
