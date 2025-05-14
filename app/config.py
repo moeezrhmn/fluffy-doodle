@@ -10,6 +10,17 @@ class Settings():
     IP2WORLD_PROXY: str = os.getenv('IP2WORLD_PROXY')
     IP2WORLD_STICKY_PROXY: str = os.getenv('IP2WORLD_STICKY_PROXY')    
 
+    GOOGLE_CUSTOM_SEARCH_API_KEY: str = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
+    GOOGLE_CUSTOM_SEARCH_ENGINE_ID: str = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
+
+    HUGGING_FACE_API_KEY: str = os.getenv('HUGGING_FACE_API_KEY')
+
+    GO_WINSTON_BASE_URL: str = os.getenv('GO_WINSTON_BASE_URL')
+    GO_WINSTON_API_KEY: str = os.getenv('GO_WINSTON_AI_API_KEY')
+
+
+    RAPID_API_KEY: str = os.getenv('RAPID_API_KEY')
+
 
 
 settings = Settings()
