@@ -1,20 +1,17 @@
 # Entry point of the app
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-import asyncio
-from asyncio import timeout
-import os
-
-from app.utils import helper
-from app import config as app_config 
-
-
-# routers imports
 from app.routers import user_router, tools_router
 
-# Get timeout from environment variable (default 30 seconds)
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
+from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+
+from app.config import settings
+from asyncio import timeout
+import asyncio
+
+
+
+REQUEST_TIMEOUT = int(settings.REQUEST_TIMEOUT)
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

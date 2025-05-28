@@ -4,21 +4,21 @@ from app.services import ai_detection
 
 from fastapi import APIRouter, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
-from app.config import settings
+from app.config import settings, redis_client
 
 from urllib.parse import urlparse
 from functools import lru_cache
 from docx import Document
 from typing import List
 
-import traceback, requests
+import traceback, requests, json
 
 
 router = APIRouter()
 
 CHUNK_SIZE = 300 
 
-@lru_cache(maxsize=200)
+# @lru_cache(maxsize=200)
 def google_search(query):
     BLOCKLIST_DOMAINS = {
         'reddit.com',
@@ -29,11 +29,14 @@ def google_search(query):
         'tiktok.com',
         'pinterest.com',
         'quora.com',
-        'support.google.com'
+        'support.google.com',
+        'ux.stackexchange.com',
+        'stackexchange.com',
+        'discussions.apple.com'
     }
     
     # Refine query to exclude unwanted sites
-    refined_query = f"{query} -site:reddit.com -site:twitter.com -site:x.com"
+    refined_query = f"{query} -filetype:pdf -site:reddit.com -site:twitter.com -site:x.com "
     
     url = f"https://www.googleapis.com/customsearch/v1?key={settings.GOOGLE_CUSTOM_SEARCH_API_KEY}&cx={settings.GOOGLE_CUSTOM_SEARCH_ENGINE_ID}&q={refined_query}"
     try:
@@ -45,20 +48,21 @@ def google_search(query):
         filtered_results = []
         for result in results:
             link = result.get('link', '')
-            if not link:
+            if not link or '.pdf' in link :
                 continue
-            # Normalize domain by removing 'www.' prefix
+
             domain = urlparse(link).netloc.lower()
             if domain.startswith('www.'):
                 domain = domain[4:]
+
             if domain not in BLOCKLIST_DOMAINS:
                 filtered_results.append(result)
             # else:
                 # print(f"Blocked URL: {link} (Domain: {domain})")
         
         # Log filtered results
-        # print('Filtered results: ', [r.get('link', '') for r in filtered_results])
-        
+        # print('Filtered results: ', [r.get('link', '') for r in filtered_results])s
+        print('Search API called ')
         return filtered_results
     except requests.RequestException as e:
         print(f"Error fetching Google Search results: {e}")
@@ -70,53 +74,64 @@ def google_search(query):
 @router.post("/check-plagiarism/")
 async def check_plagiarism_and_ai(file: UploadFile):
     try:
+        file_name = preprocess.clean_file_names(file.filename)
+        content = await file.read()
+        file_size = len(content) 
+        file.file.seek(0)
+
         text = await preprocess.extract_file_text(file)
-        
-        text = plagiarism_service.prepare_text_for_api(text) 
+        print('START REQUEST FILE NAME:  ', file_name, file_size)
+
+        text = plagiarism_service.clean_text(text) 
         if len(text) > 8000:       
             text = plagiarism_service.sample_text(text, strategy="smart", max_chars=8000)
-                
+
+
         all_results = []
+        redis_urls_key = f'urls-{file_name}-{file_size}'
+        redis_crawled_pages_key = f'crawled_pages-{file_name}-{file_size}'
         # Chunks for Google search
         chunks_for_search = preprocess.smart_tfidf_chunks(text, 40, 5)
         # Chunks for comparison with crawled data
-        chunks_for_comparison = preprocess.split_into_chunks(text, 20, 200)
-       
-        all_urls = []
-        for chunk in chunks_for_search:
-            search_results = google_search(chunk)
-            urls = [r['link'] for r in search_results[:3] if r.get('link')]
-            all_urls.extend(urls)
+        chunks_for_comparison = preprocess.simple_split_into_chunks(text)
+        # return chunks_for_comparison
+
+        all_urls = json.loads(redis_client.get(redis_urls_key)) if redis_client.get(redis_urls_key) else  []
+        if not all_urls:
+            for chunk in chunks_for_search:
+                search_results = google_search(chunk)
+                urls = [r['link'] for r in search_results[:3] if r.get('link')]
+                all_urls.extend(urls)
 
         # Remove duplicates while preserving order
         all_urls = list(dict.fromkeys(all_urls))
         print('Urls: '  , all_urls)
+        redis_client.setex(redis_urls_key, 770, json.dumps(all_urls))
 
-        # Crawl all URLs in one go
-        if all_urls:
-            crawled_pages = await crawler.crawl_urls(all_urls)
-        else:
-            crawled_pages = []
+        crawled_pages = json.loads(redis_client.get(redis_crawled_pages_key)) if redis_client.get(redis_crawled_pages_key) else await crawler.crawl_urls(all_urls)
+        redis_client.setex(redis_crawled_pages_key, 770, json.dumps(crawled_pages))
+
 
         for page in iterate_crawled_pages(crawled_pages):
             if not page.get('content'):
                 print('no content found! for URL: ', page['url'])
                 continue
             
-            page_content = preprocess.preprocess_text(page['content'])
-            print('preprocessed page content: ', page_content[:300])
+            # print('preprocessed page content: ', page_content[:300])
 
             for compare_chunk in chunks_for_comparison:
-                preprocessed_chunk = preprocess.preprocess_text(compare_chunk)
-                similarity = similarity_calculation.compare_similarity(preprocessed_chunk, page_content)
-
-                if similarity > 0.53:
+                page_content = plagiarism_service.clean_text(page['content'])
+                similarity = similarity_calculation.find_matched_text(compare_chunk, page_content)
+                print(similarity)
+                if similarity > 0.67:
                     all_results.append({
                         "chunk": compare_chunk,
                         "url": page['url'],
-                        "similarity": similarity,
+                        "similarity": float(similarity),
                         "title": page['title'],
+                        # "page_content": page_content
                     })
+            
             if len(all_results) >= 15:
                 break
 

@@ -41,6 +41,7 @@ async def fetch_url(session, url, semaphore, retries=3, backoff_factor=1):
                         return {'url': url, 'content': extracted or '', 'title': title}
                     
                     elif 'application/pdf' in content_type:
+                        continue
                         if len(content) > 10_000_000:  # Skip PDFs larger than 10MB
                             logger.warning(f"Skipping large PDF {url}: {len(content)} bytes")
                             return {'url': url, 'content': None, 'title': None}
@@ -69,6 +70,7 @@ async def fetch_url(session, url, semaphore, retries=3, backoff_factor=1):
 
 
 async def crawl_urls(urls, max_concurrency=7):
+    if not urls: return []
     semaphore = asyncio.Semaphore(max_concurrency)
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_url(session, url, semaphore) for url in urls]

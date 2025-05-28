@@ -89,7 +89,7 @@ def remove_urls(text: str) -> str:
 
 
 
-def prepare_text_for_api(text: str) -> str:
+def clean_text(text: str) -> str:
     if not text:
         return ""
 

@@ -10,9 +10,9 @@ import numpy as np
 from fastapi import UploadFile, HTTPException
 
 
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('wordnet')
+# nltk.download('punkt')
+# nltk.download('stopwords')
+# nltk.download('wordnet')
 
 def preprocess_text(text):
     stop_words = set(stopwords.words('english')) - {'not', 'no'}  # Keep negation words
@@ -33,9 +33,46 @@ def preprocess_text(text):
     
     return processed_text if processed_text else text
 
+def normalize_whitespace(text):
+    return re.sub(r'\s+', ' ', text).strip()
 
-def split_into_chunks(text: str, max_words: int = 40, max_chunks: int = 100):
-    sentences = sent_tokenize(text)
+def clean_file_names(name):
+    name = re.sub(r'[<>:"/\\|?*]', '', name)  # Remove invalid characters
+    name = re.sub(r'\s+', '-', name).strip() 
+    return name[:100]
+
+def simple_split_into_chunks(text):
+    # Avoid splitting at common abbreviations like e.g., i.e., etc.
+    # First, temporarily replace them with placeholders
+    abbreviations = {
+        "e.g.": "___EG___",
+        "i.e.": "___IE___",
+        "etc.": "___ETC___",
+        "Mr.": "___MR___",
+        "Mrs.": "___MRS___",
+        "Dr.": "___DR___"
+    }
+    
+    for abbr, placeholder in abbreviations.items():
+        text = text.replace(abbr, placeholder)
+    
+    # Split using punctuation followed by whitespace or end of string
+    raw_chunks = re.split(r'[.?!]\s*', text)
+    
+    # Restore the abbreviations and clean up
+    clean_chunks = []
+    for chunk in raw_chunks:
+        for placeholder, abbr in abbreviations.items():
+            chunk = chunk.replace(abbr, placeholder)
+        chunk = chunk.strip()
+        if chunk and len(chunk) > 20:  # Skip empty strings
+            clean_chunks.append(chunk)
+    
+    return clean_chunks
+
+
+def split_into_chunks(text: str, max_words: int = 10, max_chunks: int = 100):
+    sentences = sent_tokenize(text.strip())
     
     chunks = []
     current_chunk = ""
