@@ -39,8 +39,6 @@ async def video_info(url):
             "http_chunk_size": 1048576,  
             "retries": 3, 
             "timeout": 60,
-            'extractor_args': {'twitter': {'api': ['legacy']}}, # syndication
-            # 'cookies':'/var/www/fluffy-doodle/X_cookies.txt'
         }
         # "User-Agent: python-requests/2.32.3"
 
