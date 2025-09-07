@@ -41,7 +41,7 @@ redis_client = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, d
 
 DOWNLOAD_DIR='downloads'
 MAX_SIZE_LIMIT=50
-VIDEO_FORMAT_QUALITY = 'best[height<=480]'
+VIDEO_FORMAT_QUALITY = 'best[height<=480]/best[height<=720]/best'
 PROXIES=[
     {"http": "socks5://198.12.249.249:62529", "https": "socks5://198.12.249.249:62529"},
     {"http": "http://108.170.12.11:80", "https": "http://108.170.12.11:80"},

@@ -91,18 +91,24 @@ async def video_info(url):
         ydl_opts = {
             "quiet": True,
             'nocheckcertificate': True,
-            'proxy':app_config.IP2WORLD_STICKY_PROXY,
-            "format": 'best',
+            'proxy': app_config.IP2WORLD_STICKY_PROXY,
+            "format": app_config.VIDEO_FORMAT_QUALITY,
             "noplaylist": True,
-            "list-formats": True,
-            "socket_timeout": 30, 
-            "http_chunk_size": 1048576,  
-            "retries": 3, 
+            "socket_timeout": 30,
+            "http_chunk_size": 1048576,
+            "retries": 3,
             "timeout": 60,
-            'extractor_args': {'twitter': {'api': ['legacy']}},
-            # 'cookies-from-browser': 'chrome',
-            # 'cookies':'/var/www/fluffy-doodle/yt_cookies.txt'
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
+            'cookies': '/var/www/fluffy-doodle/yt_cookies.txt',
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['hls'],
+                    'player_client': ['web']
+                }
+            }
         }
+        
         def extract_info_async(url, ydl_opts):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 print('[video_info] Starting scraping ⌛⌛')
@@ -111,25 +117,21 @@ async def video_info(url):
         info = await asyncio.wait_for(asyncio.to_thread(extract_info_async, url, ydl_opts), timeout=60)
         print('[video_info] Scraping Completed ✅')
 
-        # with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        #     print('[video_info] Starting scraping ⌛⌛')
-        #     info = ydl.extract_info(url, download=False)
-        #     print('[video_info] Scraping Completed ✅')
-
-        
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
         file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
+        
         video_details = {
             "title": info.get("title"),
             "duration": info.get("duration"),
             "size": file_size,
             "size_in_mb": file_size_mb,
             "thumbnail": info.get("thumbnail"), 
-            'url':info['url'],
-            'download_url':info['url'],
+            'url': info.get('url'),
+            'download_url': info.get('url'),
         }
         return video_details
+        
     except Exception as e:
         raise ValueError(f"[video_info]: {str(e)}")
 
