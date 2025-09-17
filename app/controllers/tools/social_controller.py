@@ -35,7 +35,7 @@ async def youtube_download(request: Request, auth_data: dict = Depends(authorize
     
     try:
     
-        return await youtube_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+        return await youtube_service.download_video(url)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube] ' , (e) , '\n ' , tb)

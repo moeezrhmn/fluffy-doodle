@@ -150,3 +150,9 @@ def download_video(url, video_path, chunk_size=8192, proxies=None):
                 progress_bar.update(len(chunk))
 
     print("Download completed!")
+    
+
+def save_json_to_file(data, file_path):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, 'w') as json_file:
+        json.dump(data, json_file, indent=4)
