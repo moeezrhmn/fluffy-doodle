@@ -1,6 +1,4 @@
 import re
-import subprocess
-import json
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils import helper
@@ -73,32 +71,26 @@ def extract_youtube_video_id(url: str) -> str:
 
 
 def get_audio_url(video_url):
-    """Get audio URL using yt-dlp command line tool"""
+    """Get audio URL using yt-dlp Python package"""
     try:
         video_id = extract_youtube_video_id(video_url)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         print({'video_url': video_url, 'video_id': video_id})
 
-        # Use yt-dlp command line for audio
-        cmd = [
-            'yt-dlp',
-            '--dump-json',
-            '--format', 'bestaudio/best',
-        ]
-
+        options = {
+            "format": "bestaudio/best",
+            "noplaylist": True,
+            "quiet": True,
+            'skip_download': True,
+            'legacy_server_connect': True,
+        }
+        
+        # Add proxy if available
         if app_config.IP2WORLD_STICKY_PROXY:
-            cmd.extend(['--proxy', app_config.IP2WORLD_STICKY_PROXY])
-            
-        cmd.append(video_url)
-        
-        # Run the command
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            raise ValueError(f"yt-dlp command failed: {result.stderr}")
-            
-        # Parse the JSON output
-        info = json.loads(result.stdout)
+            options['proxy'] = app_config.IP2WORLD_STICKY_PROXY
+
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(video_url, download=False)
 
         audio_url = info.get('url')
         if not audio_url:
