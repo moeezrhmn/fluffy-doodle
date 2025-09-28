@@ -20,6 +20,16 @@ class Settings():
     # Integrations 
     IP2WORLD_PROXY: str = os.getenv('IP2WORLD_PROXY')
     IP2WORLD_STICKY_PROXY: str = os.getenv('IP2WORLD_STICKY_PROXY')    
+    IP2WORLD_USERNAME: str = os.getenv('IP2WORLD_USERNAME')
+    IP2WORLD_PASSWORD: str = os.getenv('IP2WORLD_PASSWORD')
+    IP2WORLD_HOST: str = os.getenv('IP2WORLD_HOST')
+    
+    def prepare_proxy(self, region: str ) -> str:
+        if not self.IP2WORLD_USERNAME or not self.IP2WORLD_PASSWORD or not self.IP2WORLD_HOST:
+            raise ValueError("IP2WORLD_USERNAME, IP2WORLD_PASSWORD, and IP2WORLD_HOST must be set in environment variables.")
+
+        proxy_url = f"http://{self.IP2WORLD_USERNAME}{region}:{self.IP2WORLD_PASSWORD}@{self.IP2WORLD_HOST}"
+        return proxy_url
 
     GOOGLE_CUSTOM_SEARCH_API_KEY: str = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
     GOOGLE_CUSTOM_SEARCH_ENGINE_ID: str = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')

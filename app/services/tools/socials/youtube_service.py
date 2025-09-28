@@ -5,56 +5,79 @@ from app.utils import helper
 import yt_dlp
 
 
+# app_config.IP2WORLD_STICKY_PROXY = "http://downloader-zone-resi-region-pk:903090@d50562158869c95b.ewe.sg.ip2world.vip:6001"
 
 
-
-async def download_video(video_url: str):
+async def download_video(video_url: str, region: str):
     """Get YouTube video information"""
     try:
         video_id = extract_youtube_video_id(video_url)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         print({'video_url': video_url, 'video_id': video_id})
 
-        v_info = await video_info(video_url)
+        v_info = await video_info(video_url, region)
+        # v_info = await video_info_2(video_url)
         return v_info
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error {str(e)}")
 
 
-async def video_info(url):
+async def video_info(url, region: str):
     """Get video information using yt-dlp command line tool"""
     try:
         options = {
-            "format": "best",
+            "listformats": True,
             "noplaylist": True,
             "quiet": True,
             'skip_download': True,
             'legacy_server_connect': True,
         }
-        
-        # Add proxy if available
-        if app_config.IP2WORLD_STICKY_PROXY:
-            options['proxy'] = app_config.IP2WORLD_STICKY_PROXY
-            
+
+        if app_config.settings.prepare_proxy(region):
+            options['proxy'] = app_config.settings.prepare_proxy(region)
 
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        
         # Save the full info to file
         helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
+
+        formats = info.get('formats', [])
+        available_formats = []
+        for fmt in formats:
+            if not fmt.get('protocol') in ['https', 'http'] or fmt.get('audio_channels') is None or fmt.get('resolution') == 'audio only':
+                continue
+            
+            resolution = fmt.get('format_note')
+            ext = fmt.get('ext')
+            filesize = fmt.get('filesize') or fmt.get('filesize_approx')
+            video_url = fmt.get('url')
+            duration = info.get("duration")
+
+            available_formats.append({
+                'ext': ext,
+                'resolution': resolution,
+                'filesize': filesize,
+                'url': video_url,
+                'duration': duration
+            })
+        sorted_formats = sorted(available_formats, key=lambda x: (x['filesize'] is None, x['filesize']))
+        selected_format = sorted_formats[-1] if sorted_formats else None
 
         return {
             'message': 'Video info retrieved successfully',
             'video_info': {
                 "title": info.get("title"),
                 "duration": info.get("duration"),
-                "size": None,
-                "size_in_mb": None,
+                "size": selected_format.get('filesize') if selected_format else None,
+
+                "size_in_mb": (selected_format.get('filesize') / (1024 * 1024)) if selected_format and selected_format.get('filesize') else None,
+
                 "thumbnail": info.get("thumbnail"),
-                'video_url': info.get('url'),
-                'download_url': info.get('url'),
+                'video_url': selected_format.get('url') if selected_format else None,
+                'download_url': selected_format.get('url') if selected_format else None,
+                'available_formats': sorted_formats
             }
         }
 
@@ -68,6 +91,9 @@ def extract_youtube_video_id(url: str) -> str:
     if match:
         return match.group(1)
     return url
+
+
+
 
 
 def get_audio_url(video_url):
@@ -109,4 +135,5 @@ def get_audio_url(video_url):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error {str(e)}")
+
 

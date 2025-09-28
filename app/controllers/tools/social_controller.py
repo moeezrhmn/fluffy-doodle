@@ -4,8 +4,19 @@ from fastapi import HTTPException
 from app.utils.auth import authorize_user
 import traceback
 from app import config as  app_config
+from pydantic import BaseModel, validator
 
+class URLRequest(BaseModel):
+    url: str
+    region: str
 
+    @validator('url')
+    def validate_youtube_url(cls, v):
+        if not v:
+            raise ValueError('URL is required')
+        if 'youtube.com' not in v and 'youtu.be' not in v:
+            raise ValueError('Invalid YouTube URL. Must contain youtube.com or youtu.be')
+        return v 
 
 router = APIRouter()
 
@@ -27,15 +38,9 @@ async def instagram_download(request: Request, auth_data: dict = Depends(authori
 
 # Youtube videos download
 @router.post("/tools/social/youtube/video-download")
-async def youtube_download(request: Request, auth_data: dict = Depends(authorize_user)):
-    payload = await request.json()
-    url = payload.get("url")
-    if not url or 'youtube.com' not in url and 'youtu.be' not in url:
-        raise HTTPException(status_code=400, detail="Invalid or missing Youtube URL.")
-    
+async def youtube_download(request: URLRequest, auth_data: dict = Depends(authorize_user)):
     try:
-    
-        return await youtube_service.download_video(url)
+        return await youtube_service.download_video(request.url, request.region)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube] ' , (e) , '\n ' , tb)

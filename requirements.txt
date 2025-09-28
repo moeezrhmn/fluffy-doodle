@@ -174,5 +174,9 @@ w3lib==2.2.1
 websockets==13.0.1
 WMI==1.5.1
 yarl==1.11.1
-yt-dlp==2024.9.27
+yt-dlp==2025.9.26
 zope.interface==7.0.3
+gunicorn==23.0.0
+uvloop==0.21.0
+httptools==0.6.4
+watchfiles==1.0.4 
