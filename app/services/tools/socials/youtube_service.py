@@ -5,8 +5,6 @@ from app.utils import helper
 import yt_dlp
 
 
-# app_config.IP2WORLD_STICKY_PROXY = "http://downloader-zone-resi-region-pk:903090@d50562158869c95b.ewe.sg.ip2world.vip:6001"
-
 
 async def download_video(video_url: str, region: str):
     """Get YouTube video information"""
