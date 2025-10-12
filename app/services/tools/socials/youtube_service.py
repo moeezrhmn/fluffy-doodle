@@ -94,7 +94,7 @@ def extract_youtube_video_id(url: str) -> str:
 
 
 
-def get_audio_url(video_url):
+def get_audio_url(video_url: str, region: str):
     """Get audio URL using yt-dlp Python package"""
     try:
         video_id = extract_youtube_video_id(video_url)
@@ -110,8 +110,8 @@ def get_audio_url(video_url):
         }
         
         # Add proxy if available
-        if app_config.IP2WORLD_STICKY_PROXY:
-            options['proxy'] = app_config.IP2WORLD_STICKY_PROXY
+        if app_config.settings.prepare_proxy(region):
+            options['proxy'] = app_config.settings.prepare_proxy(region)
 
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(video_url, download=False)

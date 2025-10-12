@@ -4,13 +4,13 @@ from fastapi import HTTPException
 from app.utils.auth import authorize_user
 import traceback
 from app import config as  app_config
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
-class URLRequest(BaseModel):
+class YoutubeURLRequest(BaseModel):
     url: str
     region: str
 
-    @validator('url')
+    @field_validator('url')
     def validate_youtube_url(cls, v):
         if not v:
             raise ValueError('URL is required')
@@ -38,7 +38,7 @@ async def instagram_download(request: Request, auth_data: dict = Depends(authori
 
 # Youtube videos download
 @router.post("/tools/social/youtube/video-download")
-async def youtube_download(request: URLRequest, auth_data: dict = Depends(authorize_user)):
+async def youtube_download(request: YoutubeURLRequest, auth_data: dict = Depends(authorize_user)):
     try:
         return await youtube_service.download_video(request.url, request.region)
     except Exception as e:
@@ -48,15 +48,10 @@ async def youtube_download(request: URLRequest, auth_data: dict = Depends(author
 
 # Youtube videos download
 @router.post("/tools/social/youtube/audio-download")
-async def youtube_audio_download( request: Request,  auth_data: dict = Depends(authorize_user)):
-    
-    payload = await request.json()
-    url = payload.get("url")
-    if not url or 'youtube.com' not in url and 'youtu.be' not in url:
-        raise HTTPException(status_code=400, detail="Invalid or missing Youtube URL.")
+async def youtube_audio_download( request: YoutubeURLRequest,  auth_data: dict = Depends(authorize_user)):
     
     try:
-        return youtube_service.get_audio_url(url)
+        return youtube_service.get_audio_url(request.url, request.region)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube_audio] ' , (e) , '\n ' , tb)
