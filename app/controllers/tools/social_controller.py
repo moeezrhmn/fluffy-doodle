@@ -123,10 +123,26 @@ async def get_user(request: Request, auth_data: dict = Depends(authorize_user)):
 
 @router.post("/get-video-info")
 async def get_user(request: Request, auth_data: dict = Depends(authorize_user)):
-    
+
     payload = await request.json()
     url = payload.get("url")
     try:
         return await yt_dlp_service.video_info(url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
+
+
+# Instagram account health monitoring
+@router.get("/tools/social/instagram/account-stats")
+async def instagram_account_stats(auth_data: dict = Depends(authorize_user)):
+    """Get Instagram account rotation statistics"""
+    try:
+        from app.services.tools.socials.instagram_account_manager import account_manager
+        stats = account_manager.get_stats()
+        return {
+            "success": True,
+            "data": stats,
+            "message": f"{stats['healthy_accounts']}/{stats['total_accounts']} accounts healthy"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")

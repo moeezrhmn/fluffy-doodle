@@ -24,7 +24,7 @@ class Settings():
     IP2WORLD_PASSWORD: str = os.getenv('IP2WORLD_PASSWORD')
     IP2WORLD_HOST: str = os.getenv('IP2WORLD_HOST')
     
-    def prepare_proxy(self, region: str ) -> str:
+    def prepare_proxy(self, region: str = 'us' ) -> str:
         if not self.IP2WORLD_USERNAME or not self.IP2WORLD_PASSWORD or not self.IP2WORLD_HOST:
             raise ValueError("IP2WORLD_USERNAME, IP2WORLD_PASSWORD, and IP2WORLD_HOST must be set in environment variables.")
 

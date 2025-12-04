@@ -6,3 +6,6 @@ data.json
 .env
 X_cookies.txt
 yt_cookies.txt
+instagram_cookies.txt
+instagram_sessions/
+*.json

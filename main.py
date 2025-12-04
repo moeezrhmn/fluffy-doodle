@@ -49,7 +49,7 @@ app.include_router(tools_router.router)
 # Root path
 @app.get('/')
 async def root():
-    return {'message':'Tools APIs developed by MOEEZ UR REHMAN - [Profile: moeezrehman.dev] '}
+    return {'message':'Tools APIs developed by MOEEZ UR REHMAN - [Portfolio: moeezrehman.quanter.dev] '}
 
 
 
