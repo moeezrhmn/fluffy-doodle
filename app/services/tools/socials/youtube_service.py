@@ -70,6 +70,7 @@ async def video_info(url, region: str):
 
         return {
             'message': 'Video info retrieved successfully',
+            'region': region,
             'video_info': {
                 "title": info.get("title"),
                 "duration": info.get("duration"),
