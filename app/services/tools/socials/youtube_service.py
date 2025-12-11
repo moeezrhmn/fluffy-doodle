@@ -29,25 +29,24 @@ async def video_info(url, region: str):
             "noplaylist": True,
             "quiet": True,
             'skip_download': True,
-            'legacy_server_connect': True,
-            'geo_bypass': True,  # Bypass geo-restrictions
-            'geo_bypass_country': region if region else 'US',  # Use region for geo-bypass
+            # 'legacy_server_connect': True,
         }
 
         if app_config.settings.prepare_proxy(region):
             options['proxy'] = app_config.settings.prepare_proxy(region)
+            print(f"Using proxy: {options['proxy']}")
 
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        # Save the full info to file
+        # Save full info to a JSON file for debugging
         # helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
 
         formats = info.get('formats', [])
         available_formats = []
-        http_headers = info.get('http_headers', {})  # Get required headers
 
         for fmt in formats:
+            
             if not fmt.get('protocol') in ['https', 'http'] or fmt.get('audio_channels') is None or fmt.get('resolution') == 'audio only':
                 continue
 
@@ -65,7 +64,6 @@ async def video_info(url, region: str):
                 'filesize': filesize,
                 'url': video_url,
                 'duration': duration,
-                'http_headers': http_headers  # Include headers for each format
             })
         sorted_formats = sorted(available_formats, key=lambda x: (x['filesize'] is None, x['filesize']))
         selected_format = sorted_formats[-1] if sorted_formats else None
@@ -77,12 +75,11 @@ async def video_info(url, region: str):
                 "duration": info.get("duration"),
                 "video_id": info.get("id"),
                 "size": selected_format.get('filesize') if selected_format else None,
-                "size_in_mb": (selected_format.get('filesize') / (1024 * 1024)) if selected_format and selected_format.get('filesize') else None,
+                "size_in_mb": round(selected_format.get('filesize') / (1024 * 1024), 2) if selected_format and selected_format.get('filesize') else None,
                 "thumbnail": info.get("thumbnail"),
                 'video_url': info.get('webpage_url'), 
-                'webpage_url': info.get('webpage_url'),  # Original YouTube URL for viewing
-                'direct_download_url': selected_format.get('url') if selected_format else None,  # Use with http_headers for download
-                'http_headers': http_headers,  
+                'download_url': selected_format.get('url') if selected_format else None, 
+                'url': selected_format.get('url') if selected_format else None, 
                 'available_formats': sorted_formats
             }
         }
