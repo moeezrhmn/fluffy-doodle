@@ -1,4 +1,4 @@
-import re
+import re, os
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils import helper
@@ -28,7 +28,7 @@ async def video_info(url, region: str, base_url: str = None):
         # Save full info to a JSON file for debugging
         helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/tiktok_{video_id}_info.json")
 
-        # Now download the actual video with cookies
+        # Now download the actual video
         output_filename = f"{app_config.DOWNLOAD_DIR}/tiktok_{video_id}.%(ext)s"
 
         download_options = {
@@ -37,8 +37,6 @@ async def video_info(url, region: str, base_url: str = None):
             # Add retry logic for handling temporary 403 errors
             'retries': 3,
             'fragment_retries': 3,
-            # Add cookie support from browser (helps with authentication)
-            'cookiesfrombrowser': ('chrome',),  # Try Chrome first, falls back if not available
             # Select best format with video+audio
             'format': 'best[ext=mp4]/best',
             # SSL and connection options
@@ -101,6 +99,8 @@ async def video_info(url, region: str, base_url: str = None):
         # Sort by filesize (prefer larger/better quality)
         sorted_formats = sorted(available_formats, key=lambda x: x['filesize'] or 0)
         selected_format = sorted_formats[-1] if sorted_formats else None
+
+        os.remove(f"{app_config.DOWNLOAD_DIR}/tiktok_{video_id}_info.json")
 
         return {
             'message': 'Video downloaded successfully',
