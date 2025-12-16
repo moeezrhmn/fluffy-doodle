@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from app.services.tools.socials import instagram_service, youtube_service, facebook_service, x_service, yt_dlp_service, vk_service
+from app.services.tools.socials import instagram_service, youtube_service, facebook_service, x_service, yt_dlp_service, vk_service, tiktok_service
 from fastapi import HTTPException
 from app.utils.auth import authorize_user
 import traceback
@@ -17,6 +17,18 @@ class YoutubeURLRequest(BaseModel):
         if 'youtube.com' not in v and 'youtu.be' not in v:
             raise ValueError('Invalid YouTube URL. Must contain youtube.com or youtu.be')
         return v 
+
+class TikTokVideoRequest(BaseModel):
+    url: str
+    region: str
+    
+    @field_validator('url')
+    def validate_tiktok_url(cls, v):
+        if not v:
+            raise ValueError('URL is required')
+        if 'tiktok.com' not in v:
+            raise ValueError('Invalid TikTok URL. Must contain tiktok.com')
+        return v
 
 router = APIRouter()
 
@@ -146,3 +158,14 @@ async def instagram_account_stats(auth_data: dict = Depends(authorize_user)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+@router.post("/tools/social/tiktok/video-download")
+async def tiktok_download(request: TikTokVideoRequest, http_request: Request, auth_data: dict = Depends(authorize_user)):
+    try:
+        base_url = str(http_request.base_url).rstrip('/')
+        return await tiktok_service.video_info(request.url, request.region, base_url)
+    except Exception as e:
+        tb = traceback.format_exc()
+        print('Error:[tiktok] ' , (e) , '\n ' , tb)
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+
