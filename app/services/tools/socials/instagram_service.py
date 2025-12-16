@@ -137,13 +137,14 @@ def download_video_with_ytdlp(post_url):
     """Final fallback using yt-dlp (no authentication)"""
     try:
         ydl_opts = {
-            'proxy': app_config.IP2WORLD_STICKY_PROXY,
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
         }
 
         print(f"[instagram] Trying yt-dlp without authentication")
+        if app_config.settings.prepare_proxy():
+            ydl_opts['proxy'] = app_config.settings.prepare_proxy()
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(post_url, download=False)
