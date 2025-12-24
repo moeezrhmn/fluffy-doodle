@@ -1,20 +1,18 @@
 import re
+import asyncio
 from fastapi import HTTPException
 from app import config as app_config
-from app.utils import helper
+from app.utils.cache import cache
 import yt_dlp
 
 
-
 async def download_video(video_url: str, region: str):
-    """Get YouTube video information"""
+    """Get YouTube video information - tries fast method first, falls back to yt-dlp"""
     try:
         video_id = extract_youtube_video_id(video_url)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        print({'video_url': video_url, 'video_id': video_id})
 
         v_info = await video_info(video_url, region)
-        # v_info = await video_info_2(video_url)
         return v_info
 
     except Exception as e:
@@ -24,22 +22,29 @@ async def download_video(video_url: str, region: str):
 async def video_info(url, region: str):
     """Get video information using yt-dlp command line tool"""
     try:
+        cache_key = cache.make_key("youtube_video", url, region)
+        
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
         options = {
             "listformats": True,
             "noplaylist": True,
             "quiet": True,
             'skip_download': True,
-            # 'legacy_server_connect': True,
+            'legacy_server_connect': True,
         }
 
         if app_config.settings.prepare_proxy(region):
             options['proxy'] = app_config.settings.prepare_proxy(region)
             print(f"Using proxy: {options['proxy']}")
 
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info(url, download=False)
+        def _extract(url, opts):
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url, download=False)
 
-        # Save full info to a JSON file for debugging
+        info = await asyncio.to_thread(_extract, url, options)
         # helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
 
         formats = info.get('formats', [])
@@ -68,7 +73,7 @@ async def video_info(url, region: str):
         sorted_formats = sorted(available_formats, key=lambda x: (x['filesize'] is None, x['filesize']))
         selected_format = sorted_formats[-1] if sorted_formats else None
 
-        return {
+        result = {
             'message': 'Video info retrieved successfully',
             'region': region,
             'video_info': {
@@ -84,7 +89,10 @@ async def video_info(url, region: str):
                 'available_formats': sorted_formats
             }
         }
+        
+        cache.set(cache_key, result)
 
+        return result
     except Exception as e:
         raise ValueError(f"[video_info]: {str(e)}")
 
@@ -100,12 +108,16 @@ def extract_youtube_video_id(url: str) -> str:
 
 
 
-def get_audio_url(video_url: str, region: str):
+async def get_audio_url(video_url: str, region: str):
     """Get audio URL using yt-dlp Python package"""
     try:
+        cache_key = cache.make_key("youtube_audio", video_url, region)
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
         video_id = extract_youtube_video_id(video_url)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        print({'video_url': video_url, 'video_id': video_id})
 
         options = {
             "format": "bestaudio/best",
@@ -121,8 +133,11 @@ def get_audio_url(video_url: str, region: str):
         if app_config.settings.prepare_proxy(region):
             options['proxy'] = app_config.settings.prepare_proxy(region)
 
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+        def _extract(url, opts):
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url, download=False)
+
+        info = await asyncio.to_thread(_extract, video_url, options)
 
         audio_url = info.get('url')
         if not audio_url:
@@ -143,6 +158,7 @@ def get_audio_url(video_url: str, region: str):
             'warning': 'Audio URL expires in 5-6 hours. Use http_headers when accessing.',
             'webpage_url': info.get('webpage_url')
         }
+        cache.set(cache_key, audio_details)
         return audio_details
 
     except Exception as e:

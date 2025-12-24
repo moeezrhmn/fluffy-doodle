@@ -4,6 +4,8 @@ from urllib.parse import urlparse, parse_qs
 from fastapi import Request, HTTPException
 from app import config as app_config
 from app.utils import helper
+import asyncio
+from app.utils.cache import cache
 
 try:
     from instagrapi import Client
@@ -17,28 +19,33 @@ except ImportError:
 os.environ['https_proxy'] = app_config.IP2WORLD_STICKY_PROXY
 
 
-def download_video(post_url, request: Request, save_dir="downloads"):
+async def download_video(post_url, request: Request, save_dir="downloads"):
     """Download Instagram video - Optimized for speed"""
-
+    cache_key = cache.make_key("instagram_video", post_url)
+    result = cache.get(cache_key)
+    if result:
+        return result
     try:
-        return instaloader_download_video(post_url)
+        result = await asyncio.to_thread(instaloader_download_video, post_url)
+        cache.set(cache_key, result)
+        return result
     except Exception as instaloader_ex:
         print(f"[instagram] Instaloader failed: {str(instaloader_ex)}. Trying yt-dlp fallback...")
 
-    try:
-        return download_video_with_ytdlp(post_url)
-    except Exception as ytdlp_ex:
-        print(f"[instagram] yt-dlp failed: {str(ytdlp_ex)}. Trying Instagrapi fallback...")
+    # try:
+    #     result = download_video_with_ytdlp(post_url)
+    #     return result
+    # except Exception as ytdlp_ex:
+    #     print(f"[instagram] yt-dlp failed: {str(ytdlp_ex)}. Trying Instagrapi fallback...")
 
-    try:
-        return download_video_with_instagrapi(post_url)
-    except Exception as instagrapi_ex:
+    # try:
+    #     result = download_video_with_instagrapi(post_url)
+    #     return result
+    # except Exception as instagrapi_ex:
         
         raise ValueError(
-            f"[instagram] Failed to download video from Instagram."
+            f"[instagram] Failed to download video from Instagram. " + str(instaloader_ex) + ' '
             f" Instaloader: {str(instaloader_ex)}, "
-            f"Instagrapi: {str(instagrapi_ex)}, "
-            f"yt-dlp: {str(ytdlp_ex)}",
         )
 
    

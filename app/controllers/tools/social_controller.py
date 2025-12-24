@@ -43,7 +43,7 @@ async def instagram_download(request: Request, auth_data: dict = Depends(authori
     
     try:
     
-        return instagram_service.download_video(url, request)
+        return await instagram_service.download_video(url, request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
 
@@ -63,7 +63,7 @@ async def youtube_download(request: YoutubeURLRequest, auth_data: dict = Depends
 async def youtube_audio_download( request: YoutubeURLRequest,  auth_data: dict = Depends(authorize_user)):
     
     try:
-        return youtube_service.get_audio_url(request.url, request.region)
+        return await youtube_service.get_audio_url(request.url, request.region)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube_audio] ' , (e) , '\n ' , tb)
@@ -79,9 +79,9 @@ async def facebook_dowbload(request: Request, auth_data: dict = Depends(authoriz
     if not url or 'facebook.com' not in url:
         raise HTTPException(status_code=400, detail="Invalid or missing Facebook URL.")
     
+    region = payload.get("region", 'us')
     try:
-    
-        return await facebook_service.download_video(url, request, app_config.DOWNLOAD_DIR)
+        return await facebook_service.download_video(url, region, app_config.DOWNLOAD_DIR)
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[facebook] ' , (e) , '\n ' , tb)

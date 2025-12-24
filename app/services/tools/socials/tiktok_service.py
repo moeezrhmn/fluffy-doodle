@@ -3,11 +3,16 @@ from fastapi import HTTPException
 from app import config as app_config
 from app.utils import helper
 import yt_dlp
-
+from app.utils.cache import cache
 
 
 async def video_info(url, region: str, base_url: str = None):
     try:
+        cache_key = cache.make_key("tiktok_video", url, region)
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
         video_id = None
 
         info_options = {
@@ -102,7 +107,7 @@ async def video_info(url, region: str, base_url: str = None):
 
         os.remove(f"{app_config.DOWNLOAD_DIR}/tiktok_{video_id}_info.json")
 
-        return {
+        result = {
             'message': 'Video downloaded successfully',
             'region': region,
             'video_info': {
@@ -120,7 +125,8 @@ async def video_info(url, region: str, base_url: str = None):
                 'total_formats': len(sorted_formats)
             }
         }
-
+        cache.set(cache_key, result)
+        return result
     except Exception as e:
         raise ValueError(f"[video_info]: {str(e)}")
 
