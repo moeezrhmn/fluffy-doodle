@@ -19,6 +19,21 @@ uvicorn main:app --reload
 gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app
+
+# Run specific test file
+pytest tests/test_example.py
+
+# Run tests with verbose output
+pytest -v
+```
+
 ### Database Management
 ```bash
 # Run database migrations
@@ -54,6 +69,7 @@ The application follows a clean layered architecture pattern:
   - `user_router.py`: User authentication and management endpoints
   - `tools_router.py`: Aggregates all tool-related controllers
 - **Controllers** (`app/controllers/`): HTTP request/response handling and validation
+  - `user_controller.py`: User signup, login, and password management endpoints
   - `tools/social_controller.py`: Social media download endpoints
   - `plagiarism_controller.py`: Plagiarism detection endpoints
   - `temp_mail_controller.py`: Temporary email endpoints
@@ -97,7 +113,8 @@ The application follows a clean layered architecture pattern:
   - Tertiary: yt-dlp (final fallback)
   - Account Manager (`instagram_account_manager.py`): Manages multiple Instagram accounts with intelligent rotation, rate limiting (180 req/hour), session persistence, and health monitoring
 - **Facebook** (`facebook_service.py`): Video extraction
-- **X/Twitter** (`x_service.py`): Video downloading
+- **X/Twitter** (`x_service.py`): Video downloading with regional proxy support
+- **TikTok** (`tiktok_service.py`): TikTok video downloading with regional proxy and SSL bypass
 - **VK** (`vk_service.py`): VK platform video downloads
 - **Generic** (`yt_dlp_service.py`): Fallback downloader supporting multiple platforms
 
