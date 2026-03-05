@@ -14,7 +14,13 @@ SQLALCHEMY_DATABASE_URL = (
 
 
 # Create the SQLAlchemy engine
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,      # Test connection before use, discard if closed
+    pool_recycle=1800,       # Recycle connections after 30 minutes
+    pool_size=10,
+    max_overflow=20,
+)
 
 # Create a configured "Session" class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
