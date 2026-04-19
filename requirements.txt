@@ -203,3 +203,5 @@ yarl==1.20.0
 yt-dlp==2026.2.21
 yt-dlp-ejs==0.3.2
 zope.interface==7.2
+aiofiles==23.2.1
+ffmpeg-python==0.2.0

@@ -1,6 +1,7 @@
 # Entry point of the app
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.routers import user_router, tools_router
+from app.services.tools.media import compress_service
 
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, Request
@@ -51,6 +52,11 @@ app.mount("/downloads", StaticFiles(directory=config.DOWNLOAD_DIR), name="downlo
 
 app.include_router(user_router.router)
 app.include_router(tools_router.router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    compress_service.start_workers()
 
 
 # Root path
