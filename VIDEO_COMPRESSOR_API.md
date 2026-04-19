@@ -80,7 +80,8 @@ Poll this endpoint every **2–3 seconds** until `status` is `done` or `error`.
 ```json
 {
     "job_id": "1236eb0f-...",
-    "status": "done"
+    "status": "done",
+    "download_url": "https://yourdomain.com/downloads/1236eb0f-..._compressed.mp4"
 }
 ```
 
@@ -97,26 +98,7 @@ Poll this endpoint every **2–3 seconds** until `status` is `done` or `error`.
 
 ---
 
-## 3. Download Compressed File
-
-**GET** `/tools/media/job/{job_id}/download`
-
-Returns a binary `video/mp4` stream with header:
-```
-Content-Disposition: attachment; filename="compressed.mp4"
-```
-
-The file stays on the server until you call DELETE — so you can stream it directly to the user's browser or download it server-side and re-serve it.
-
-**Error Responses:**
-| Status | Reason |
-|---|---|
-| 400 | Job not ready yet (still queued/processing) |
-| 404 | Job not found or file missing |
-
----
-
-## 4. Delete Job (Cleanup)
+## 3. Delete Job (Cleanup)
 
 **DELETE** `/tools/media/job/{job_id}`
 

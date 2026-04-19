@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 import aiofiles
 import ffmpeg
 
+from app import config as app_config
+
 TEMP_DIR = "/tmp/multsaver"
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"}
@@ -37,6 +39,7 @@ class Job:
     target_mb: Optional[int]
     status: str = JobStatus.QUEUED
     error: Optional[str] = None
+    download_url: Optional[str] = None
 
 
 jobs: Dict[str, Job] = {}
@@ -127,11 +130,14 @@ def start_workers() -> None:
         asyncio.create_task(_worker())
 
 
-async def enqueue(content: bytes, preset: str, target_mb: Optional[int]) -> Job:
+async def enqueue(content: bytes, preset: str, target_mb: Optional[int], base_url: str) -> Job:
     os.makedirs(TEMP_DIR, exist_ok=True)
+    os.makedirs(app_config.DOWNLOAD_DIR, exist_ok=True)
     job_id = str(uuid.uuid4())
     input_path = f"{TEMP_DIR}/{job_id}_input.mp4"
-    output_path = f"{TEMP_DIR}/{job_id}_output.mp4"
+    output_filename = f"{job_id}_compressed.mp4"
+    output_path = os.path.join(app_config.DOWNLOAD_DIR, output_filename)
+    download_url = f"{base_url.rstrip('/')}/downloads/{output_filename}"
 
     async with aiofiles.open(input_path, "wb") as f:
         await f.write(content)
@@ -142,6 +148,7 @@ async def enqueue(content: bytes, preset: str, target_mb: Optional[int]) -> Job:
         output_path=output_path,
         preset=preset,
         target_mb=target_mb,
+        download_url=download_url,
     )
     jobs[job_id] = job
     await _queue.put(job)
