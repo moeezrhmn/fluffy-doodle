@@ -1,7 +1,8 @@
 # Entry point of the app
+from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.routers import user_router, tools_router
-from app.services.tools.media import compress_service
+from app.services.tools.media import compress_service, audio_service
 
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, Request
@@ -40,7 +41,15 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
                 }
             )
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    compress_service.start_workers()
+    audio_service.start_workers()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Add timeout middleware
 app.add_middleware(TimeoutMiddleware)
@@ -52,11 +61,6 @@ app.mount("/downloads", StaticFiles(directory=config.DOWNLOAD_DIR), name="downlo
 
 app.include_router(user_router.router)
 app.include_router(tools_router.router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    compress_service.start_workers()
 
 
 # Root path
