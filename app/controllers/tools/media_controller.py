@@ -6,7 +6,7 @@ from app.services.tools.media import audio_service, compress_service
 from app.services.tools.media.compress_service import JobStatus
 from app.utils.auth import authorize_user
 
-VALID_FORMATS  = {"mp3", "wav"}
+VALID_FORMATS   = {"mp3", "wav", "aac"}
 VALID_QUALITIES = {"high", "medium", "low"}
 
 router = APIRouter()
@@ -99,7 +99,7 @@ async def extract_audio(
     if format not in VALID_FORMATS:
         raise HTTPException(status_code=400, detail="Invalid format. Use: mp3, wav.")
 
-    if format == "mp3" and quality not in VALID_QUALITIES:
+    if format in ("mp3", "aac") and quality not in VALID_QUALITIES:
         raise HTTPException(status_code=400, detail="Invalid quality. Use: high, medium, low.")
 
     base_url = str(request.base_url)

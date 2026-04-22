@@ -24,6 +24,12 @@ MP3_QUALITY = {
     "low":    "128k",
 }
 
+AAC_QUALITY = {
+    "high":   "256k",
+    "medium": "192k",
+    "low":    "128k",
+}
+
 
 class JobStatus:
     QUEUED     = "queued"
@@ -67,6 +73,9 @@ def _run_extraction(input_path: str, output_path: str, fmt: str, quality: str) -
     if fmt == "mp3":
         bitrate = MP3_QUALITY.get(quality, MP3_QUALITY["high"])
         _ffmpeg(["-i", input_path, "-vn", "-c:a", "libmp3lame", "-b:a", bitrate, output_path])
+    elif fmt == "aac":
+        bitrate = AAC_QUALITY.get(quality, AAC_QUALITY["high"])
+        _ffmpeg(["-i", input_path, "-vn", "-c:a", "aac", "-b:a", bitrate, output_path])
     else:
         _ffmpeg(["-i", input_path, "-vn", "-c:a", "pcm_s16le", output_path])
 
