@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.routers import user_router, tools_router
-from app.services.tools.media import compress_service, audio_service
+from app.services.tools.media import compress_service, audio_service, trim_service
 
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, Request
@@ -46,6 +46,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     compress_service.start_workers()
     audio_service.start_workers()
+    trim_service.start_workers()
     yield
 
 

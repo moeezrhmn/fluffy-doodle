@@ -2,7 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from app.services.tools.media import audio_service, compress_service
+from app.services.tools.media import audio_service, compress_service, trim_service
 from app.services.tools.media.compress_service import JobStatus
 from app.utils.auth import authorize_user
 
@@ -141,4 +141,77 @@ async def delete_audio_job(job_id: str, auth_data: dict = Depends(authorize_user
         raise HTTPException(status_code=400, detail="Cannot delete a job that is currently processing.")
 
     audio_service.remove_job(job_id)
+    return {"job_id": job_id, "deleted": True}
+
+
+# ── Video Trimmer ───────────────────────────────────────────────────────────
+
+VALID_TRIM_MODES = {"fast", "rerender"}
+
+
+@router.post("/tools/media/trim-video")
+async def trim_video(
+    request: Request,
+    file: UploadFile = File(...),
+    start: str = Form("00:00:00"),
+    end: str = Form(...),
+    mode: str = Form("fast"),
+    auth_data: dict = Depends(authorize_user),
+):
+    content = await file.read()
+
+    if len(content) > trim_service.MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 500MB.")
+
+    if file.content_type not in trim_service.ALLOWED_VIDEO_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported file type.")
+
+    if not trim_service.validate_time(start):
+        raise HTTPException(status_code=400, detail="Invalid start time. Use HH:MM:SS or seconds.")
+
+    if not trim_service.validate_time(end):
+        raise HTTPException(status_code=400, detail="Invalid end time. Use HH:MM:SS or seconds.")
+
+    if mode not in VALID_TRIM_MODES:
+        raise HTTPException(status_code=400, detail="Invalid mode. Use: fast, rerender.")
+
+    base_url = str(request.base_url)
+    job = await trim_service.enqueue(content, start, end, mode, base_url)
+    position = trim_service.queue_position(job.job_id)
+
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "position": position,
+    }
+
+
+@router.get("/tools/media/trim-job/{job_id}")
+async def get_trim_job_status(job_id: str, auth_data: dict = Depends(authorize_user)):
+    job = trim_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    response = {"job_id": job_id, "status": job.status}
+
+    if job.status == trim_service.JobStatus.QUEUED:
+        response["position"] = trim_service.queue_position(job_id)
+    elif job.status == trim_service.JobStatus.DONE:
+        response["download_url"] = job.download_url
+    elif job.status == trim_service.JobStatus.ERROR:
+        response["error"] = job.error
+
+    return response
+
+
+@router.delete("/tools/media/trim-job/{job_id}")
+async def delete_trim_job(job_id: str, auth_data: dict = Depends(authorize_user)):
+    job = trim_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    if job.status == trim_service.JobStatus.PROCESSING:
+        raise HTTPException(status_code=400, detail="Cannot delete a job that is currently processing.")
+
+    trim_service.remove_job(job_id)
     return {"job_id": job_id, "deleted": True}
