@@ -28,7 +28,7 @@ class Settings():
         if not self.IP2WORLD_USERNAME or not self.IP2WORLD_PASSWORD or not self.IP2WORLD_HOST:
             raise ValueError("IP2WORLD_USERNAME, IP2WORLD_PASSWORD, and IP2WORLD_HOST must be set in environment variables.")
 
-        proxy_url = f"http://{self.IP2WORLD_USERNAME}{region}:{self.IP2WORLD_PASSWORD}@{self.IP2WORLD_HOST}"
+        proxy_url = f"http://{self.IP2WORLD_USERNAME}{region.upper()}:{self.IP2WORLD_PASSWORD}@{self.IP2WORLD_HOST}"
         return proxy_url
 
     GOOGLE_CUSTOM_SEARCH_API_KEY: str = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
