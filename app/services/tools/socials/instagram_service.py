@@ -25,27 +25,23 @@ async def download_video(post_url, request: Request, save_dir="downloads"):
     result = cache.get(cache_key)
     if result:
         return result
+    # try:
+    #     result = await asyncio.to_thread(instaloader_download_video, post_url)
+    #     cache.set(cache_key, result)
+    #     return result
+    # except Exception as ex:
+    #     print(f"[instagram] Instaloader failed: {str(ex)}. Trying yt-dlp fallback...")
+
     try:
-        result = await asyncio.to_thread(instaloader_download_video, post_url)
+        result = download_video_with_ytdlp(post_url)
         cache.set(cache_key, result)
         return result
-    except Exception as instaloader_ex:
-        print(f"[instagram] Instaloader failed: {str(instaloader_ex)}. Trying yt-dlp fallback...")
+    except Exception as ex:
+        print(f"[instagram] yt-dlp failed: {str(ex)}.")
 
-    # try:
-    #     result = download_video_with_ytdlp(post_url)
-    #     return result
-    # except Exception as ytdlp_ex:
-    #     print(f"[instagram] yt-dlp failed: {str(ytdlp_ex)}. Trying Instagrapi fallback...")
-
-    # try:
-    #     result = download_video_with_instagrapi(post_url)
-    #     return result
-    # except Exception as instagrapi_ex:
         
         raise ValueError(
-            f"[instagram] Failed to download video from Instagram. " + str(instaloader_ex) + ' '
-            f" Instaloader: {str(instaloader_ex)}, "
+            f"[instagram] Failed to download video from Instagram. " + str(ex) + ' '
         )
 
    
@@ -156,16 +152,24 @@ def download_video_with_ytdlp(post_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(post_url, download=False)
 
-        # Extract video URL (best quality)
         video_url = None
-        if 'url' in info:
+        if 'formats' in info:
+            # Combined formats: ext=mp4, protocol=https, format_note has no "DASH" or "only"
+            combined = [
+                f for f in info['formats']
+                if f.get('ext') == 'mp4'
+                and 'DASH' not in (f.get('format_note') or '')
+                and 'only' not in (f.get('format_note') or '')
+            ]
+            if combined:
+                # Pick highest filesize (best quality combined)
+                best = max(combined, key=lambda x: x.get('filesize') or x.get('filesize_approx') or 0)
+                video_url = best.get('url')
+                print(f"[instagram] Selected combined format: {best.get('format_id')} ({best.get('ext')})")
+
+        # Fallback: top-level url (yt-dlp selected a single format)
+        if not video_url and 'url' in info:
             video_url = info['url']
-        elif 'formats' in info:
-            # Get the best quality format with video
-            formats = [f for f in info['formats'] if f.get('vcodec') != 'none']
-            if formats:
-                best_format = max(formats, key=lambda x: x.get('height', 0))
-                video_url = best_format.get('url')
 
         if not video_url:
             raise ValueError("Could not extract video URL from Instagram")
