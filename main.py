@@ -17,6 +17,20 @@ from app import config
 
 REQUEST_TIMEOUT = int(settings.REQUEST_TIMEOUT)
 
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        import json as _json
+        region = request.query_params.get("region")
+        if not region and request.method in ("POST", "PUT", "PATCH"):
+            try:
+                body = await request.body()
+                region = _json.loads(body).get("region")
+            except Exception:
+                pass
+        print(f"[request] {request.method} {request.url.path} | region={region or '-'} | client={request.client.host if request.client else '-'}")
+        return await call_next(request)
+
+
 class TimeoutMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
@@ -54,6 +68,7 @@ app = FastAPI(lifespan=lifespan)
 
 # Add timeout middleware
 app.add_middleware(TimeoutMiddleware)
+app.add_middleware(RequestLogMiddleware)
 
 # Mount downloads directory for static file serving
 if not os.path.exists(config.DOWNLOAD_DIR):
