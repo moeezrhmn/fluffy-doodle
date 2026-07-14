@@ -21,13 +21,16 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         import json as _json
         region = request.query_params.get("region")
-        if not region and request.method in ("POST", "PUT", "PATCH"):
+        video_url = None
+        if request.method in ("POST", "PUT", "PATCH"):
             try:
                 body = await request.body()
-                region = _json.loads(body).get("region")
+                data = _json.loads(body)
+                region = region or data.get("region")
+                video_url = data.get("url")
             except Exception:
                 pass
-        print(f"[request] {request.method} {request.url.path} | region={region or '-'} | client={request.client.host if request.client else '-'}")
+        print(f"[request] {request.method} {request.url.path} | region={region or '-'} | url={video_url or '-'} | client={request.client.host if request.client else '-'}")
         return await call_next(request)
 
 
