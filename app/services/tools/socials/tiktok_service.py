@@ -1,226 +1,228 @@
-import asyncio
+import re
+import json
 import os
 import glob
 import time
+import httpx
 from app import config as app_config
 from app.utils.cache import cache
 from app.utils.concurrency import download_slot
-import yt_dlp
-from yt_dlp.networking.impersonate import ImpersonateTarget
+from app.utils import monitor
 
-# Limits
-TIKTOK_MAX_DURATION = 120  # seconds (2 minutes)
-TIKTOK_CACHE_TTL = 86400  # 24 hours in seconds
-TIKTOK_FORMAT = 'best[height<=480][ext=mp4]/best[height<=480]/worst[ext=mp4]/worst'
+TIKTOK_MAX_DURATION = 120
+TIKTOK_FILE_TTL = 86400   # 24 hours on disk
+TIKTOK_CACHE_TTL = 82800  # 23 hours in Redis
 
-# Fallback regions to try if requested region fails
-TIKTOK_FALLBACK_REGIONS = ['US', 'SG']
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity",
+    "Referer": "https://www.tiktok.com/",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+}
 
 
-def _base_options():
-    return {
-        "quiet": True,
-        'noplaylist': True,
-        'nocheckcertificate': True,
-        'legacy_server_connect': True,
-        'impersonate': ImpersonateTarget.from_str('chrome'),
-    }
+def _extract_video_id(url: str):
+    match = re.search(r'/video/(\d+)', url)
+    return match.group(1) if match else None
 
 
-def _cleanup_old_tiktok_files():
-    """Delete TikTok files older than 24 hours from downloads folder."""
-    pattern = os.path.join(app_config.DOWNLOAD_DIR, "tiktok_*.mp4")
+async def _get_video_id(url: str, proxy: str = None) -> str:
+    vid = _extract_video_id(url)
+    if not vid:
+        kwargs = {"follow_redirects": True, "timeout": 15, "headers": BROWSER_HEADERS}
+        if proxy:
+            kwargs["proxy"] = proxy
+        async with httpx.AsyncClient(**kwargs) as client:
+            r = await client.head(url)
+        vid = _extract_video_id(str(r.url))
+    if not vid:
+        raise ValueError(f"Could not extract TikTok video ID from: {url}")
+    return vid
+
+
+def _parse_item(html: str) -> dict:
+    match = re.search(
+        r'<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>',
+        html, re.DOTALL
+    )
+    if not match:
+        raise ValueError("TikTok page JSON not found — likely a bot-check page")
+    page_data = json.loads(match.group(1))
+    try:
+        item = (
+            page_data["__DEFAULT_SCOPE__"]
+            .get("webapp.video-detail", {})
+            .get("itemInfo", {})
+            .get("itemStruct")
+        )
+        if not item:
+            raise ValueError("itemStruct missing in page data")
+        return item
+    except (KeyError, TypeError):
+        raise ValueError("Unexpected TikTok page structure")
+
+
+def _extract_cdn_url(item: dict) -> str | None:
+    video = item.get("video", {})
+    for key in ("playAddr", "playUrl", "downloadAddr"):
+        val = video.get(key)
+        if not val:
+            continue
+        if isinstance(val, str):
+            return val
+        if isinstance(val, dict):
+            for u in (val.get("urlList") or []):
+                if u:
+                    return u
+    return None
+
+
+def _cleanup_old_files():
     now = time.time()
-    for filepath in glob.glob(pattern):
-        if now - os.path.getmtime(filepath) > TIKTOK_CACHE_TTL:
+    for fp in glob.glob(os.path.join(app_config.DOWNLOAD_DIR, "tiktok_*.mp4")):
+        if now - os.path.getmtime(fp) > TIKTOK_FILE_TTL:
             try:
-                os.remove(filepath)
+                os.remove(fp)
             except OSError:
                 pass
 
 
-def _extract_sync(url, opts):
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        return ydl.extract_info(url, download=False)
-
-
-def _download_sync(url, opts):
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.extract_info(url, download=True)
-
-
-async def _extract_with_fallback(url, region):
-    """Try extracting info: requested region proxy → no proxy → fallback regions."""
-    attempts = []
-
-    # 1) Requested region proxy
-    opts = _base_options()
-    opts['skip_download'] = True
-    try:
-        proxy = app_config.settings.prepare_proxy(region)
-        opts['proxy'] = proxy
-        attempts.append(f"proxy-{region}")
-    except ValueError:
-        pass
-
-    try:
-        async with download_slot():
-            return await asyncio.to_thread(_extract_sync, url, opts), region
-    except Exception as e:
-        print(f"[tiktok] Extract failed with {attempts[-1] if attempts else 'no-proxy'}: {e}")
-
-    # 2) No proxy (direct from server)
-    opts = _base_options()
-    opts['skip_download'] = True
-    try:
-        async with download_slot():
-            return await asyncio.to_thread(_extract_sync, url, opts), None
-    except Exception as e:
-        print(f"[tiktok] Extract failed with no proxy: {e}")
-
-    # 3) Fallback regions
-    for fallback_region in TIKTOK_FALLBACK_REGIONS:
-        if fallback_region.lower() == region.lower():
+def _proxies_to_try(region: str):
+    seen = set()
+    for r in [region, 'US', 'SG']:
+        key = r.upper()
+        if key in seen:
             continue
-        opts = _base_options()
-        opts['skip_download'] = True
+        seen.add(key)
         try:
-            opts['proxy'] = app_config.settings.prepare_proxy(fallback_region)
+            yield f"proxy-{key}", app_config.settings.prepare_proxy(r)
         except ValueError:
-            continue
-        try:
-            async with download_slot():
-                return await asyncio.to_thread(_extract_sync, url, opts), fallback_region
-        except Exception as e:
-            print(f"[tiktok] Extract failed with proxy-{fallback_region}: {e}")
-
-    raise ValueError("All extraction attempts failed. TikTok may be blocking this video or all proxy regions.")
+            pass
+    yield "no-proxy", None
 
 
-async def _download_with_fallback(url, region, working_region):
-    """Download using the region that worked for extraction, with fallbacks."""
-    regions_to_try = []
-
-    # Start with the region that worked for extraction
-    if working_region:
-        regions_to_try.append(working_region)
-    else:
-        regions_to_try.append(None)  # None = no proxy
-
-    # Add other fallbacks
-    if working_region != region:
-        regions_to_try.append(region)
-    regions_to_try.append(None)  # no proxy
-    for fr in TIKTOK_FALLBACK_REGIONS:
-        if fr not in regions_to_try and fr.lower() != (working_region or '').lower():
-            regions_to_try.append(fr)
-
-    for r in regions_to_try:
-        opts = _base_options()
-        opts['format'] = TIKTOK_FORMAT
-        opts['outtmpl'] = f"{app_config.DOWNLOAD_DIR}/tiktok_%(id)s.%(ext)s"
-        opts['retries'] = 3
-        opts['fragment_retries'] = 3
-
-        label = 'no-proxy'
-        if r:
-            try:
-                opts['proxy'] = app_config.settings.prepare_proxy(r)
-                label = f"proxy-{r}"
-            except ValueError:
-                continue
-
-        try:
-            async with download_slot():
-                await asyncio.to_thread(_download_sync, url, opts)
-            print(f"[tiktok] Download succeeded with {label}")
-            return
-        except Exception as e:
-            print(f"[tiktok] Download failed with {label}: {e}")
-
-    raise ValueError("All download attempts failed.")
-
-
-async def video_info(url, region: str, base_url: str = None):
+async def video_info(url: str, region: str, base_url: str = None):
     try:
         cache_key = cache.make_key("tiktok_video", url, region)
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return cached_data
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
 
-        # Step 1: Extract info with fallback
-        info, working_region = await _extract_with_fallback(url, region)
+        proxy_for_id = None
+        try:
+            proxy_for_id = app_config.settings.prepare_proxy(region)
+        except ValueError:
+            pass
 
-        video_id = info.get('id')
-        duration = info.get('duration') or 0
+        video_id = await _get_video_id(url, proxy=proxy_for_id)
+        canonical_url = f"https://www.tiktok.com/@i/video/{video_id}"
+        download_path = os.path.join(app_config.DOWNLOAD_DIR, f"tiktok_{video_id}.mp4")
 
-        # Check duration limit
-        if duration > TIKTOK_MAX_DURATION:
-            raise ValueError(
-                f"Video is too long ({duration}s). "
-                f"Maximum allowed duration is {TIKTOK_MAX_DURATION}s ({TIKTOK_MAX_DURATION // 60} minutes)."
-            )
-
-        # Step 2: Check if file already exists (cached on disk)
-        download_path = f"{app_config.DOWNLOAD_DIR}/tiktok_{video_id}.mp4"
-        if not os.path.exists(download_path):
-            _cleanup_old_tiktok_files()
-
-            # Step 3: Download with fallback
-            await _download_with_fallback(url, region, working_region)
-
-        # Build format info from extracted metadata
-        formats = info.get('formats', [])
-        available_formats = []
-        for fmt in formats:
-            protocol = fmt.get('protocol', '')
-            vcodec = fmt.get('vcodec', 'none')
-            if protocol not in ['https', 'http']:
-                continue
-            if not vcodec or vcodec == 'none':
-                continue
-            resolution = fmt.get('resolution')
-            filesize = fmt.get('filesize') or fmt.get('filesize_approx')
-            width = fmt.get('width')
-            height = fmt.get('height')
-            available_formats.append({
-                'format_id': fmt.get('format_id'),
-                'ext': fmt.get('ext'),
-                'resolution': resolution or (f"{width}x{height}" if width and height else 'unknown'),
-                'format_note': fmt.get('format_note') or resolution or 'unknown',
-                'width': width,
-                'height': height,
-                'filesize': filesize,
-                'filesize_mb': round(filesize / (1024 * 1024), 2) if filesize else None,
-            })
-
-        sorted_formats = sorted(available_formats, key=lambda x: (x['filesize'] is None, x['filesize']))
-
-        # Get actual file size from disk
-        actual_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
-
-        server_video_url = None
-        if base_url:
-            server_video_url = f"{base_url}/downloads/tiktok_{video_id}.mp4"
-
-        result = {
-            'message': 'Video downloaded successfully',
-            'region': working_region or region,
-            'video_info': {
-                "title": info.get("title"),
-                "duration": duration,
-                "video_id": video_id,
-                "size": actual_size,
-                "size_in_mb": round(actual_size / (1024 * 1024), 2) if actual_size else None,
-                "thumbnail": info.get("thumbnail"),
-                'webpage_url': info.get('webpage_url'),
-                'video_url': server_video_url,
-                'download_url': server_video_url,
-                'available_formats': sorted_formats,
-                'total_formats': len(sorted_formats)
+        # File already on disk — build result without re-scraping
+        if os.path.exists(download_path):
+            actual_size = os.path.getsize(download_path)
+            server_url = f"{base_url}/downloads/tiktok_{video_id}.mp4" if base_url else None
+            result = {
+                "message": "Video downloaded successfully",
+                "region": region,
+                "video_info": {
+                    "video_id": video_id,
+                    "size": actual_size,
+                    "size_in_mb": round(actual_size / (1024 * 1024), 2),
+                    "webpage_url": url,
+                    "video_url": server_url,
+                    "download_url": server_url,
+                }
             }
-        }
-        cache.set(cache_key, result, ttl=TIKTOK_CACHE_TTL)
-        return result
+            cache.set(cache_key, result, ttl=TIKTOK_CACHE_TTL)
+            return result
+
+        _cleanup_old_files()
+
+        last_error = None
+        for label, proxy in _proxies_to_try(region):
+            try:
+                kwargs = {
+                    "timeout": httpx.Timeout(20, read=60),
+                    "headers": BROWSER_HEADERS,
+                    "follow_redirects": True,
+                }
+                if proxy:
+                    kwargs["proxy"] = proxy
+
+                async with download_slot():
+                    async with httpx.AsyncClient(**kwargs) as client:
+                        # Step 1: load page — sets tt_chain_token cookie
+                        r = await client.get(canonical_url)
+                        r.raise_for_status()
+                        item = _parse_item(r.text)
+
+                        cdn_url = _extract_cdn_url(item)
+                        if not cdn_url:
+                            raise ValueError("No video URL found in page data")
+
+                        duration = item.get("video", {}).get("duration") or item.get("duration") or 0
+                        if duration > TIKTOK_MAX_DURATION:
+                            raise ValueError(f"Video too long ({duration}s). Max is {TIKTOK_MAX_DURATION}s.")
+
+                        # Step 2: download with SAME client (cookies active)
+                        async with client.stream("GET", cdn_url) as dr:
+                            dr.raise_for_status()
+                            with open(download_path, "wb") as f:
+                                async for chunk in dr.aiter_bytes(chunk_size=1024 * 64):
+                                    f.write(chunk)
+
+                print(f"[tiktok] Success with {label}")
+                actual_size = os.path.getsize(download_path) if os.path.exists(download_path) else 0
+                    
+
+                author = item.get("author") or {}
+                video = item.get("video", {})
+                cover = video.get("cover") or video.get("originCover") or ""
+                stats = item.get("stats") or {}
+                server_url = f"{base_url}/downloads/tiktok_{video_id}.mp4" if base_url else None
+
+                result = {
+                    "message": "Video downloaded successfully",
+                    "region": region,
+                    "video_info": {
+                        "title": item.get("desc") or "TikTok Video",
+                        "duration": duration,
+                        "video_id": video_id,
+                        "thumbnail": cover,
+                        "size": actual_size,
+                        "size_in_mb": round(actual_size / (1024 * 1024), 2) if actual_size else None,
+                        "webpage_url": url,
+                        "video_url": server_url,
+                        "download_url": server_url,
+                        "author": author.get("nickname") or author.get("uniqueId"),
+                        "play_count": stats.get("playCount"),
+                        "like_count": stats.get("diggCount"),
+                    }
+                }
+                cache.set(cache_key, result, ttl=TIKTOK_CACHE_TTL)
+                return result
+
+            except ValueError:
+                raise
+            except Exception as e:
+                print(f"[tiktok] {label} failed: {e}")
+                last_error = e
+                if os.path.exists(download_path):
+                    os.remove(download_path)
+                continue
+
+        raise ValueError(f"All TikTok attempts failed: {last_error}")
+
+    except ValueError:
+        raise
     except Exception as e:
-        raise ValueError(f"[video_info]: {str(e)}")
+        raise ValueError(f"[tiktok] {str(e)}")
