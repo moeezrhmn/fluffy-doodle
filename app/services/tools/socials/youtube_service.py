@@ -3,7 +3,7 @@ import asyncio
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils.cache import cache
-from app.utils.concurrency import get_download_semaphore
+from app.utils.concurrency import download_slot
 import yt_dlp
 
 
@@ -46,7 +46,7 @@ async def video_info(url, region: str):
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
-        async with get_download_semaphore():
+        async with download_slot():
             info = await asyncio.to_thread(_extract, url, options)
         # helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
 
@@ -140,7 +140,8 @@ async def get_audio_url(video_url: str, region: str):
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
-        info = await asyncio.to_thread(_extract, video_url, options)
+        async with download_slot():
+            info = await asyncio.to_thread(_extract, video_url, options)
 
         audio_url = info.get('url')
         if not audio_url:

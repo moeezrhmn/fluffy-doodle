@@ -5,6 +5,7 @@ from fastapi import Request, HTTPException
 from app import config as app_config
 from app.utils import helper
 from app.utils.cache import cache
+from app.utils.concurrency import download_slot
 
 
 
@@ -48,7 +49,8 @@ async def video_info(url, region: str):
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
             
-        info = await asyncio.to_thread(_extract, url, ydl_opts)
+        async with download_slot():
+            info = await asyncio.to_thread(_extract, url, ydl_opts)
         
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0

@@ -1,6 +1,7 @@
 import requests, os, yt_dlp, re, asyncio
 from fastapi import Request, HTTPException
 from app import config as app_config
+from app.utils.concurrency import download_slot
 
 
 
@@ -41,7 +42,8 @@ async def video_info(url):
                 print("[video_info] Starting scraping ⌛⌛")
                 return ydl.extract_info(url, download=False)
 
-        info = await asyncio.wait_for(asyncio.to_thread(extract_info_async, url, ydl_opts), timeout=60)
+        async with download_slot():
+            info = await asyncio.wait_for(asyncio.to_thread(extract_info_async, url, ydl_opts), timeout=60)
         print("[video_info] Scraping Completed ✅")
 
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)

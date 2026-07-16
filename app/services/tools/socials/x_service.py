@@ -3,7 +3,7 @@ import yt_dlp, re, asyncio
 from urllib.parse import urlparse, parse_qs
 from fastapi import Request, HTTPException
 from app import config as app_config
-from app.utils.concurrency import get_download_semaphore
+from app.utils.concurrency import download_slot
 import asyncio
 from app.utils.cache import cache
 
@@ -59,7 +59,7 @@ async def video_info(url, region: str = 'us'):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
     
-        async with get_download_semaphore():
+        async with download_slot():
             info = await asyncio.to_thread(_extract, url, ydl_opts)
         
         # Twitter has two format types:

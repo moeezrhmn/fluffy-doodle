@@ -4,7 +4,7 @@ import glob
 import time
 from app import config as app_config
 from app.utils.cache import cache
-from app.utils.concurrency import get_download_semaphore
+from app.utils.concurrency import download_slot
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
@@ -64,7 +64,7 @@ async def _extract_with_fallback(url, region):
         pass
 
     try:
-        async with get_download_semaphore():
+        async with download_slot():
             return await asyncio.to_thread(_extract_sync, url, opts), region
     except Exception as e:
         print(f"[tiktok] Extract failed with {attempts[-1] if attempts else 'no-proxy'}: {e}")
@@ -73,7 +73,7 @@ async def _extract_with_fallback(url, region):
     opts = _base_options()
     opts['skip_download'] = True
     try:
-        async with get_download_semaphore():
+        async with download_slot():
             return await asyncio.to_thread(_extract_sync, url, opts), None
     except Exception as e:
         print(f"[tiktok] Extract failed with no proxy: {e}")
@@ -89,7 +89,7 @@ async def _extract_with_fallback(url, region):
         except ValueError:
             continue
         try:
-            async with get_download_semaphore():
+            async with download_slot():
                 return await asyncio.to_thread(_extract_sync, url, opts), fallback_region
         except Exception as e:
             print(f"[tiktok] Extract failed with proxy-{fallback_region}: {e}")
@@ -131,7 +131,7 @@ async def _download_with_fallback(url, region, working_region):
                 continue
 
         try:
-            async with get_download_semaphore():
+            async with download_slot():
                 await asyncio.to_thread(_download_sync, url, opts)
             print(f"[tiktok] Download succeeded with {label}")
             return
