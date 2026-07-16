@@ -18,17 +18,19 @@ def get_download_semaphore() -> asyncio.Semaphore:
 
 @asynccontextmanager
 async def download_slot():
-    """Use instead of `async with get_download_semaphore()` — also tracks counts."""
     global downloads_active, downloads_queued
     downloads_queued += 1
+    acquired = False
     try:
         async with get_download_semaphore():
-            downloads_queued -= 1
+            acquired = True
+            downloads_queued = max(0, downloads_queued - 1)
             downloads_active += 1
             try:
                 yield
             finally:
-                downloads_active -= 1
-    except Exception:
-        downloads_queued = max(0, downloads_queued - 1)
+                downloads_active = max(0, downloads_active - 1)
+    except BaseException:
+        if not acquired:
+            downloads_queued = max(0, downloads_queued - 1)
         raise
