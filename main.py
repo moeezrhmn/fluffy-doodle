@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.routers import user_router, tools_router
 from app.services.tools.media import compress_service, audio_service, trim_service
 
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
@@ -24,6 +24,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         region = request.query_params.get("region")
         video_url = None
+        data = None
         if request.method in ("POST", "PUT", "PATCH"):
             try:
                 body = await request.body()
@@ -35,10 +36,23 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         track = request.url.path.startswith(("/tools/", "/users/"))
         if track:
             print(f"[request] {request.method} {request.url.path} | region={region or '-'} | url={video_url or '-'} | client={request.client.host if request.client else '-'}")
-            entry = monitor.request_started(request.url.path, request.method, region, video_url)
+            entry = monitor.request_started(request.url.path, request.method, region, video_url, payload=data)
         response = await call_next(request)
         if track:
-            monitor.request_finished(entry, response.status_code)
+            error_body = None
+            if response.status_code >= 400:
+                chunks = []
+                async for chunk in response.body_iterator:
+                    chunks.append(chunk)
+                raw = b"".join(chunks)
+                error_body = raw.decode("utf-8", errors="ignore")[:1000]
+                response = Response(
+                    content=raw,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type=response.media_type,
+                )
+            monitor.request_finished(entry, response.status_code, error_body)
         return response
 
 
@@ -72,6 +86,11 @@ async def lifespan(app: FastAPI):
     compress_service.start_workers()
     audio_service.start_workers()
     trim_service.start_workers()
+    try:
+        config.redis_client.ping()
+        print("[startup] Redis connected ✓")
+    except Exception as e:
+        raise RuntimeError(f"[startup] Redis unavailable — cannot start.")
     yield
 
 
@@ -216,6 +235,13 @@ MONITOR_HTML = """<!DOCTYPE html>
       </table>
     </div>
   </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Failed Requests <span id="failed-count" style="color:#f87171;margin-left:6px;"></span></h2>
+    <div id="failed-list" style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+      <p style="color:#64748b;text-align:center;padding:20px;">No failures recorded.</p>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -265,6 +291,29 @@ MONITOR_HTML = """<!DOCTYPE html>
           '<td class="mono">' + esc(r.region || '-') + '</td>' +
           '</tr>';
       }).join('');
+    }
+
+    const failedList = document.getElementById('failed-list');
+    document.getElementById('failed-count').textContent = d.failed_list.length ? '(' + d.failed_list.length + ')' : '';
+    if (d.failed_list && d.failed_list.length) {
+      failedList.innerHTML = d.failed_list.map(f => {
+        const ts = f.started_at ? new Date(f.started_at * 1000).toLocaleTimeString() : '-';
+        const payload = f.payload ? JSON.stringify(f.payload, null, 2) : null;
+        const error = f.error || null;
+        return '<div style="background:#1e2235;border:1px solid #3b1f1f;border-radius:8px;padding:14px;">' +
+          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">' +
+            '<span class="badge method">' + esc(f.method) + '</span>' +
+            '<span class="mono" style="color:#e2e8f0;">' + esc(f.path) + '</span>' +
+            '<span class="badge err">' + esc(f.status) + '</span>' +
+            '<span class="mono" style="color:#64748b;margin-left:auto;">' + ts + ' &bull; ' + esc(f.region || '-') + ' &bull; ' + (f.duration_ms != null ? f.duration_ms + 'ms' : '') + '</span>' +
+          '</div>' +
+          (f.url && f.url !== '-' ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">URL: <span class="mono">' + esc(f.url) + '</span></div>' : '') +
+          (payload ? '<details style="margin-bottom:6px;"><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Payload</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#a78bfa;">' + esc(payload) + '</pre></details>' : '') +
+          (error ? '<details open><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Error</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#f87171;">' + esc(error) + '</pre></details>' : '') +
+          '</div>';
+      }).join('');
+    } else {
+      failedList.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px;">No failures recorded.</p>';
     }
   };
 

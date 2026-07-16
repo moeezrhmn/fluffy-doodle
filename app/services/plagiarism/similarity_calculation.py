@@ -8,7 +8,7 @@ from app.services.plagiarism import service as pl_service
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import string, re
-import faiss
+# import faiss  # disabled
 import numpy as np
 
 
