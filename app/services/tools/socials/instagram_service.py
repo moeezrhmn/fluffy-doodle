@@ -4,6 +4,7 @@ from urllib.parse import urlparse, parse_qs
 from fastapi import Request, HTTPException
 from app import config as app_config
 from app.utils import helper
+from app.utils.concurrency import get_download_semaphore
 import asyncio
 from app.utils.cache import cache
 
@@ -33,7 +34,8 @@ async def download_video(post_url, request: Request, save_dir="downloads"):
     #     print(f"[instagram] Instaloader failed: {str(ex)}. Trying yt-dlp fallback...")
 
     try:
-        result = download_video_with_ytdlp(post_url)
+        async with get_download_semaphore():
+            result = await asyncio.to_thread(download_video_with_ytdlp, post_url)
         cache.set(cache_key, result)
         return result
     except Exception as ex:

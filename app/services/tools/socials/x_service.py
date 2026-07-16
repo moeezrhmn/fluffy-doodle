@@ -1,9 +1,9 @@
 
-import instaloader, requests, os, math, yt_dlp, re, asyncio
+import yt_dlp, re, asyncio
 from urllib.parse import urlparse, parse_qs
 from fastapi import Request, HTTPException
 from app import config as app_config
-from app.utils import helper
+from app.utils.concurrency import get_download_semaphore
 import asyncio
 from app.utils.cache import cache
 
@@ -38,16 +38,16 @@ async def video_info(url, region: str = 'us'):
     try:
         ydl_opts = {
             "quiet": True,
-            'nocheckcertificate': True,  # Bypass SSL certificate verification
-            'legacy_server_connect': True,  # Use legacy server connection for better compatibility
+            'nocheckcertificate': True,  
+            'legacy_server_connect': True, 
             "format": 'best',
             "socket_timeout": 30,
             "http_chunk_size": 1048576,
-            "retries": 10,  # Increased retries for better reliability
-            'fragment_retries': 10,  # Retry for fragmented downloads
-            "timeout": 90,  # Increased timeout
-            'skip_download': True,  # Only get info, don't download
-            'no_warnings': True,  # Suppress warnings
+            "retries": 5,  
+            'fragment_retries': 5, 
+            "timeout": 90, 
+            'skip_download': True, 
+            'no_warnings': True, 
         }
 
         
@@ -59,18 +59,24 @@ async def video_info(url, region: str = 'us'):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
     
-        info = await asyncio.to_thread(_extract, url, ydl_opts)
-        selected_format = next(
-            (f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")),
-            None
+        async with get_download_semaphore():
+            info = await asyncio.to_thread(_extract, url, ydl_opts)
+        
+        # Twitter has two format types:
+        #   http-* — direct HTTPS .mp4 with combined video+audio (vcodec shows as unknown/None)
+        #   hls-*  — HLS video-only streams
+        # Prefer direct HTTPS combined formats; filesize is usually in filesize_approx not filesize.
+        formats = info.get("formats", [])
+        combined = [
+            f for f in formats
+            if f.get('protocol') in ('https', 'http')
+            and 'only' not in (f.get('format_note') or '')
+        ]
+        selected_format = max(
+            combined or formats,
+            key=lambda x: x.get('filesize') or x.get('filesize_approx') or 0,
+            default=None
         )
-
-        if not selected_format and info.get("formats"):
-            selected_format = max(
-                [f for f in info.get("formats", []) if f.get("vcodec") != "none"],
-                key=lambda x: x.get("filesize", 0) or 0,
-                default=None
-            )
 
 
         file_size = selected_format.get("filesize") or selected_format.get("filesize_approx", 0) if selected_format else 0

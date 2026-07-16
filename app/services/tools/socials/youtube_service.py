@@ -3,6 +3,7 @@ import asyncio
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils.cache import cache
+from app.utils.concurrency import get_download_semaphore
 import yt_dlp
 
 
@@ -34,6 +35,7 @@ async def video_info(url, region: str):
             "quiet": True,
             'skip_download': True,
             'legacy_server_connect': True,
+            'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'web']}},
         }
 
         if app_config.settings.prepare_proxy(region):
@@ -44,7 +46,8 @@ async def video_info(url, region: str):
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
-        info = await asyncio.to_thread(_extract, url, options)
+        async with get_download_semaphore():
+            info = await asyncio.to_thread(_extract, url, options)
         # helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
 
         formats = info.get('formats', [])

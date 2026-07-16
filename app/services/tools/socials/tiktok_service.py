@@ -4,6 +4,7 @@ import glob
 import time
 from app import config as app_config
 from app.utils.cache import cache
+from app.utils.concurrency import get_download_semaphore
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
@@ -63,7 +64,8 @@ async def _extract_with_fallback(url, region):
         pass
 
     try:
-        return await asyncio.to_thread(_extract_sync, url, opts), region
+        async with get_download_semaphore():
+            return await asyncio.to_thread(_extract_sync, url, opts), region
     except Exception as e:
         print(f"[tiktok] Extract failed with {attempts[-1] if attempts else 'no-proxy'}: {e}")
 
@@ -71,7 +73,8 @@ async def _extract_with_fallback(url, region):
     opts = _base_options()
     opts['skip_download'] = True
     try:
-        return await asyncio.to_thread(_extract_sync, url, opts), None
+        async with get_download_semaphore():
+            return await asyncio.to_thread(_extract_sync, url, opts), None
     except Exception as e:
         print(f"[tiktok] Extract failed with no proxy: {e}")
 
@@ -86,7 +89,8 @@ async def _extract_with_fallback(url, region):
         except ValueError:
             continue
         try:
-            return await asyncio.to_thread(_extract_sync, url, opts), fallback_region
+            async with get_download_semaphore():
+                return await asyncio.to_thread(_extract_sync, url, opts), fallback_region
         except Exception as e:
             print(f"[tiktok] Extract failed with proxy-{fallback_region}: {e}")
 
@@ -127,7 +131,8 @@ async def _download_with_fallback(url, region, working_region):
                 continue
 
         try:
-            await asyncio.to_thread(_download_sync, url, opts)
+            async with get_download_semaphore():
+                await asyncio.to_thread(_download_sync, url, opts)
             print(f"[tiktok] Download succeeded with {label}")
             return
         except Exception as e:
