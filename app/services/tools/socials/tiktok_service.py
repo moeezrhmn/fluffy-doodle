@@ -182,7 +182,8 @@ async def video_info(url: str, region: str, base_url: str = None):
 
                 print(f"[tiktok] Success with {label}")
                 actual_size = os.path.getsize(download_path) if os.path.exists(download_path) else 0
-                    
+                if actual_size:
+                    monitor.add_request_proxy_bytes(actual_size)
 
                 author = item.get("author") or {}
                 video = item.get("video", {})

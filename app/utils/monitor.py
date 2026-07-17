@@ -1,6 +1,28 @@
 import time
 import json
+from contextvars import ContextVar
 from app.config import redis_client as _r
+
+# Middleware sets _req_id in parent task → child task inherits it (read-only inheritance works).
+# Services write bytes to global dict using the inherited req_id.
+# Middleware reads dict directly — no back-propagation needed.
+_req_id_var: ContextVar[int] = ContextVar("req_id", default=0)
+_req_proxy_bytes: dict[int, int] = {}
+
+
+def _set_request_id(req_id: int):
+    _req_id_var.set(req_id)
+    _req_proxy_bytes[req_id] = 0
+
+
+def add_request_proxy_bytes(byte_count: int):
+    req_id = _req_id_var.get()
+    if req_id:
+        _req_proxy_bytes[req_id] = _req_proxy_bytes.get(req_id, 0) + byte_count
+
+
+def _get_and_reset_proxy_bytes(req_id: int) -> int:
+    return _req_proxy_bytes.pop(req_id, 0)
 
 STATS_KEY = "monitor:stats"
 RECENT_KEY = "monitor:recent"
@@ -12,19 +34,22 @@ RECENT_MAX = 100
 FAILED_MAX = 50
 
 
-def request_started(path: str, method: str, region: str, video_url: str, payload: dict = None) -> dict:
+def request_started(path: str, method: str, region: str, video_url: str, req_id: int, payload: dict = None, ip: str = None) -> dict:
     try:
         _r.incr(ACTIVE_KEY)
         _r.hincrby(STATS_KEY, "total", 1)
         _r.hsetnx(STATS_KEY, "start_time", time.time())
     except Exception as e:
         print(f"[monitor] Redis error: {e}")
+    _set_request_id(req_id)
     return {
         "path": path,
         "method": method,
         "region": region or "-",
         "url": video_url or "-",
         "payload": payload,
+        "ip": ip or "-",
+        "req_id": req_id,
         "started_at": time.time(),
     }
 
@@ -45,14 +70,17 @@ def request_finished(entry: dict, status_code: int, error_body: str = None):
         if status_code >= 400:
             _r.hincrby(path_key, "failed", 1)
 
+        proxy_bytes = _get_and_reset_proxy_bytes(entry.get("req_id", 0))
         record = {
             "path": entry["path"],
             "method": entry["method"],
             "region": entry["region"],
             "url": entry["url"],
+            "ip": entry.get("ip", "-"),
             "status": status_code,
             "duration_ms": duration_ms,
             "started_at": entry["started_at"],
+            "proxy_kb": round(proxy_bytes / 1024, 1) if proxy_bytes else 0,
         }
         _r.lpush(RECENT_KEY, json.dumps(record))
         _r.ltrim(RECENT_KEY, 0, RECENT_MAX - 1)

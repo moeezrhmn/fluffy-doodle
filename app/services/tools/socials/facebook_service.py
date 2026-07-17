@@ -1,9 +1,9 @@
 
-import instaloader, requests, os, math, yt_dlp, asyncio
+import instaloader, requests, os, math, yt_dlp, asyncio, json
 from urllib.parse import urlparse, parse_qs
 from fastapi import Request, HTTPException
 from app import config as app_config
-from app.utils import helper
+from app.utils import helper, monitor
 from app.utils.cache import cache
 from app.utils.concurrency import download_slot
 
@@ -51,7 +51,12 @@ async def video_info(url, region: str):
             
         async with download_slot():
             info = await asyncio.to_thread(_extract, url, ydl_opts)
-        
+
+        try:
+            monitor.add_request_proxy_bytes(len(json.dumps(info, default=str).encode()))
+        except Exception:
+            pass
+
         selected_format = next((f for f in info.get("formats", []) if f.get("format_id") == info.get("format_id")), None)
         file_size = selected_format.get("filesize", 0) if selected_format else 0
         file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0

@@ -34,26 +34,33 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
         track = request.url.path.startswith(("/tools/", "/users/"))
+        entry = None
         if track:
-            print(f"[request] {request.method} {request.url.path} | region={region or '-'} | url={video_url or '-'} | client={request.client.host if request.client else '-'}")
-            entry = monitor.request_started(request.url.path, request.method, region, video_url, payload=data)
-        response = await call_next(request)
-        if track:
-            error_body = None
-            if response.status_code >= 400:
-                chunks = []
-                async for chunk in response.body_iterator:
-                    chunks.append(chunk)
-                raw = b"".join(chunks)
-                error_body = raw.decode("utf-8", errors="ignore")[:1000]
-                response = Response(
-                    content=raw,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type=response.media_type,
-                )
-            monitor.request_finished(entry, response.status_code, error_body)
-        return response
+            client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.client.host if request.client else "-")
+            print(f"[request] {request.method} {request.url.path} | region={region or '-'} | url={video_url or '-'} | ip={client_ip}")
+            entry = monitor.request_started(request.url.path, request.method, region, video_url, req_id=id(request), payload=data, ip=client_ip)
+        try:
+            response = await call_next(request)
+            if track:
+                error_body = None
+                if response.status_code >= 400:
+                    chunks = []
+                    async for chunk in response.body_iterator:
+                        chunks.append(chunk)
+                    raw = b"".join(chunks)
+                    error_body = raw.decode("utf-8", errors="ignore")[:1000]
+                    response = Response(
+                        content=raw,
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                        media_type=response.media_type,
+                    )
+                monitor.request_finished(entry, response.status_code, error_body)
+            return response
+        except Exception as exc:
+            if track and entry:
+                monitor.request_finished(entry, 500)
+            raise
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
@@ -88,6 +95,7 @@ async def lifespan(app: FastAPI):
     trim_service.start_workers()
     try:
         config.redis_client.ping()
+        config.redis_client.set("monitor:active", 0)
         print("[startup] Redis connected ✓")
     except Exception as e:
         raise RuntimeError(f"[startup] Redis unavailable — cannot start.")
@@ -230,8 +238,8 @@ MONITOR_HTML = """<!DOCTYPE html>
     <div class="card">
       <h2>Recent Requests</h2>
       <table>
-        <thead><tr><th>Method</th><th>Path</th><th>Status</th><th>ms</th><th>Region</th></tr></thead>
-        <tbody id="recent-body"><tr><td colspan="5" style="color:#64748b;text-align:center;padding:20px;">Waiting for data…</td></tr></tbody>
+        <thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Time</th><th>Region</th><th>IP</th><th>Proxy</th></tr></thead>
+        <tbody id="recent-body"><tr><td colspan="7" style="color:#64748b;text-align:center;padding:20px;">Waiting for data…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -249,11 +257,16 @@ MONITOR_HTML = """<!DOCTYPE html>
   const ws = new WebSocket(proto + '://' + location.host + '/ws/monitor');
   const statusEl = document.getElementById('status');
 
+  // Previous serialized snapshots for change detection
+  let _prevPaths = '', _prevRecent = '', _prevFailed = '', _prevFailedCount = -1;
+
   ws.onopen = () => { statusEl.textContent = 'Live'; statusEl.className = ''; };
   ws.onclose = () => { statusEl.textContent = 'Disconnected'; statusEl.className = 'disconnected'; setTimeout(() => location.reload(), 3000); };
 
   ws.onmessage = e => {
     const d = JSON.parse(e.data);
+
+    // Stat numbers — textContent only, never interrupts selection
     document.getElementById('uptime').textContent = 'Up ' + d.uptime;
     document.getElementById('active').textContent = d.active_requests;
     document.getElementById('total').textContent = d.total_requests;
@@ -272,48 +285,65 @@ MONITOR_HTML = """<!DOCTYPE html>
     document.getElementById('rate').textContent = rate + '%';
     document.getElementById('rate-bar').style.width = rate + '%';
 
-    const pathsBody = document.getElementById('paths-body');
-    if (d.top_paths.length) {
-      pathsBody.innerHTML = d.top_paths.map(p =>
-        '<tr><td class="mono truncate">' + esc(p.path) + '</td><td>' + p.total + '</td><td class="' + (p.failed ? 'red' : '') + '">' + p.failed + '</td></tr>'
-      ).join('');
+    // Top endpoints — rebuild only if data changed
+    const pathsSig = JSON.stringify(d.top_paths);
+    if (pathsSig !== _prevPaths) {
+      _prevPaths = pathsSig;
+      const pathsBody = document.getElementById('paths-body');
+      if (d.top_paths.length) {
+        pathsBody.innerHTML = d.top_paths.map(p =>
+          '<tr><td class="mono truncate">' + esc(p.path) + '</td><td>' + p.total + '</td><td class="' + (p.failed ? 'red' : '') + '">' + p.failed + '</td></tr>'
+        ).join('');
+      }
     }
 
-    const recentBody = document.getElementById('recent-body');
-    if (d.recent.length) {
-      recentBody.innerHTML = d.recent.map(r => {
-        const ok = r.status && r.status < 400;
-        return '<tr>' +
-          '<td><span class="badge method">' + esc(r.method) + '</span></td>' +
-          '<td class="mono truncate" style="max-width:180px">' + esc(r.path) + '</td>' +
-          '<td><span class="badge ' + (ok ? 'ok' : 'err') + '">' + (r.status || '…') + '</span></td>' +
-          '<td class="mono">' + (r.duration_ms != null ? r.duration_ms : '…') + '</td>' +
-          '<td class="mono">' + esc(r.region || '-') + '</td>' +
-          '</tr>';
-      }).join('');
+    // Recent requests — rebuild only if first item changed (new request came in)
+    const recentSig = JSON.stringify(d.recent.slice(0, 3));
+    if (recentSig !== _prevRecent) {
+      _prevRecent = recentSig;
+      const recentBody = document.getElementById('recent-body');
+      if (d.recent.length) {
+        recentBody.innerHTML = d.recent.map(r => {
+          const ok = r.status && r.status < 400;
+          return '<tr>' +
+            '<td><span class="badge method">' + esc(r.method) + '</span></td>' +
+            '<td class="mono truncate" style="max-width:180px">' + esc(r.path) + '</td>' +
+            '<td><span class="badge ' + (ok ? 'ok' : 'err') + '">' + (r.status || '…') + '</span></td>' +
+            '<td class="mono">' + (r.duration_ms != null ? (r.duration_ms >= 1000 ? (r.duration_ms/1000).toFixed(1)+'s' : r.duration_ms+'ms') : '…') + '</td>' +
+            '<td class="mono">' + esc(r.region || '-') + '</td>' +
+            '<td class="mono" style="color:#94a3b8;">' + esc(r.ip || '-') + '</td>' +
+            '<td class="mono" style="color:#a78bfa;">' + (r.proxy_kb ? (r.proxy_kb >= 1024 ? (r.proxy_kb/1024).toFixed(1)+'MB' : r.proxy_kb+'KB') : '-') + '</td>' +
+            '</tr>';
+        }).join('');
+      }
     }
 
-    const failedList = document.getElementById('failed-list');
-    document.getElementById('failed-count').textContent = d.failed_list.length ? '(' + d.failed_list.length + ')' : '';
-    if (d.failed_list && d.failed_list.length) {
-      failedList.innerHTML = d.failed_list.map(f => {
-        const ts = f.started_at ? new Date(f.started_at * 1000).toLocaleTimeString() : '-';
-        const payload = f.payload ? JSON.stringify(f.payload, null, 2) : null;
-        const error = f.error || null;
-        return '<div style="background:#1e2235;border:1px solid #3b1f1f;border-radius:8px;padding:14px;">' +
-          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">' +
-            '<span class="badge method">' + esc(f.method) + '</span>' +
-            '<span class="mono" style="color:#e2e8f0;">' + esc(f.path) + '</span>' +
-            '<span class="badge err">' + esc(f.status) + '</span>' +
-            '<span class="mono" style="color:#64748b;margin-left:auto;">' + ts + ' &bull; ' + esc(f.region || '-') + ' &bull; ' + (f.duration_ms != null ? f.duration_ms + 'ms' : '') + '</span>' +
-          '</div>' +
-          (f.url && f.url !== '-' ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">URL: <span class="mono">' + esc(f.url) + '</span></div>' : '') +
-          (payload ? '<details style="margin-bottom:6px;"><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Payload</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#a78bfa;">' + esc(payload) + '</pre></details>' : '') +
-          (error ? '<details open><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Error</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#f87171;">' + esc(error) + '</pre></details>' : '') +
-          '</div>';
-      }).join('');
-    } else {
-      failedList.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px;">No failures recorded.</p>';
+    // Failed list — only rebuild when count changes (preserves open <details> and selected text)
+    const failedCount = d.failed_list ? d.failed_list.length : 0;
+    document.getElementById('failed-count').textContent = failedCount ? '(' + failedCount + ')' : '';
+    if (failedCount !== _prevFailedCount) {
+      _prevFailedCount = failedCount;
+      const failedList = document.getElementById('failed-list');
+      if (failedCount) {
+        failedList.innerHTML = d.failed_list.map(f => {
+          const ts = f.started_at ? new Date(f.started_at * 1000).toLocaleTimeString() : '-';
+          const payload = f.payload ? JSON.stringify(f.payload, null, 2) : null;
+          const error = f.error || null;
+          return '<div style="background:#1e2235;border:1px solid #3b1f1f;border-radius:8px;padding:14px;">' +
+            '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">' +
+              '<span class="badge method">' + esc(f.method) + '</span>' +
+              '<span class="mono" style="color:#e2e8f0;">' + esc(f.path) + '</span>' +
+              '<span class="badge err">' + esc(f.status) + '</span>' +
+              '<span class="mono" style="color:#64748b;margin-left:auto;">' + ts + ' &bull; ' + esc(f.region || '-') + ' &bull; ' + esc(f.ip || '-') + (f.proxy_kb ? ' &bull; <span style=\"color:#a78bfa;\">' + (f.proxy_kb >= 1024 ? (f.proxy_kb/1024).toFixed(1)+'MB' : f.proxy_kb+'KB') + '</span>' : '') + ' &bull; ' + (f.duration_ms != null ? (f.duration_ms >= 1000 ? (f.duration_ms/1000).toFixed(1)+'s' : f.duration_ms+'ms') : '') + '</span>' +
+            '</div>' +
+            (f.url && f.url !== '-' ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">URL: <span class="mono">' + esc(f.url) + '</span></div>' : '') +
+            (payload ? '<details style="margin-bottom:6px;"><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Payload</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#a78bfa;">' + esc(payload) + '</pre></details>' : '') +
+            (error ? '<details open><summary style="cursor:pointer;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Error</summary><pre style="margin-top:6px;background:#0f1117;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#f87171;">' + esc(error) + '</pre></details>' : '') +
+            '</div>';
+        }).join('');
+      } else {
+        failedList.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px;">No failures recorded.</p>';
+      }
     }
   };
 

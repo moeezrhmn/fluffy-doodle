@@ -1,9 +1,11 @@
 import re
+import json
 import asyncio
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils.cache import cache
 from app.utils.concurrency import download_slot
+from app.utils import monitor
 import yt_dlp
 
 
@@ -35,12 +37,15 @@ async def video_info(url, region: str):
             "quiet": True,
             'skip_download': True,
             'legacy_server_connect': True,
-            'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'web']}},
+            'socket_timeout': 30,
+            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
         }
 
-        if app_config.settings.prepare_proxy(region):
+        try:
             options['proxy'] = app_config.settings.prepare_proxy(region)
-            print(f"Using proxy: {options['proxy']}")
+            print(f"[youtube] Using proxy region={region}")
+        except ValueError:
+            pass
 
         def _extract(url, opts):
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -48,7 +53,11 @@ async def video_info(url, region: str):
 
         async with download_slot():
             info = await asyncio.to_thread(_extract, url, options)
-        # helper.save_json_to_file(info, f"{app_config.DOWNLOAD_DIR}/{info.get('id')}_info.json")
+
+        try:
+            monitor.add_request_proxy_bytes(len(json.dumps(info, default=str).encode()))
+        except Exception:
+            pass
 
         formats = info.get('formats', [])
         available_formats = []
@@ -101,11 +110,11 @@ async def video_info(url, region: str):
 
 
 def extract_youtube_video_id(url: str) -> str:
-    pattern = r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
+    pattern = r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,12})'
     match = re.search(pattern, url)
     if match:
         return match.group(1)
-    return url
+    raise ValueError(f"Invalid YouTube URL: could not extract video ID from '{url}'")
 
 
 
@@ -128,13 +137,16 @@ async def get_audio_url(video_url: str, region: str):
             "quiet": True,
             'skip_download': True,
             'legacy_server_connect': True,
+            'socket_timeout': 30,
             'geo_bypass': True,
             'geo_bypass_country': region if region else 'US',
+            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
         }
 
-        # Add proxy if available
-        if app_config.settings.prepare_proxy(region):
+        try:
             options['proxy'] = app_config.settings.prepare_proxy(region)
+        except ValueError:
+            pass
 
         def _extract(url, opts):
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -142,6 +154,11 @@ async def get_audio_url(video_url: str, region: str):
 
         async with download_slot():
             info = await asyncio.to_thread(_extract, video_url, options)
+
+        try:
+            monitor.add_request_proxy_bytes(len(json.dumps(info, default=str).encode()))
+        except Exception:
+            pass
 
         audio_url = info.get('url')
         if not audio_url:
