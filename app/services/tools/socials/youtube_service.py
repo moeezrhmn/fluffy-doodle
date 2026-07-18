@@ -9,6 +9,25 @@ from app.utils import monitor
 import yt_dlp
 
 
+def _friendly_error(raw: str) -> str:
+    msg = raw.lower()
+    if "sign in to confirm your age" in msg or "age" in msg and "sign in" in msg:
+        return "This video is age-restricted and cannot be downloaded without authentication."
+    if "sign in to confirm you're not a bot" in msg or "not a bot" in msg:
+        return "YouTube is blocking this request as a bot. Try a different region or try again later."
+    if "account associated with this video has been terminated" in msg:
+        return "This video is unavailable — the YouTube account has been terminated."
+    if "this video is no longer available" in msg:
+        return "This video is no longer available."
+    if "video unavailable" in msg or "this video is not available" in msg:
+        return "This video is unavailable or region-restricted."
+    if "private video" in msg:
+        return "This video is private and cannot be downloaded."
+    if "invalid youtube url" in msg:
+        return raw
+    return "Failed to retrieve video information. The video may be unavailable or restricted."
+
+
 async def download_video(video_url: str, region: str):
     """Get YouTube video information - tries fast method first, falls back to yt-dlp"""
     try:
@@ -18,8 +37,10 @@ async def download_video(video_url: str, region: str):
         v_info = await video_info(video_url, region)
         return v_info
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error {str(e)}")
+        raise HTTPException(status_code=400, detail={"detail": str(e), "message": _friendly_error(str(e))})
 
 
 async def video_info(url, region: str):
@@ -38,7 +59,6 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
         }
 
         try:
@@ -106,7 +126,7 @@ async def video_info(url, region: str):
 
         return result
     except Exception as e:
-        raise ValueError(f"[video_info]: {str(e)}")
+        raise ValueError(str(e))
 
 
 def extract_youtube_video_id(url: str) -> str:
@@ -140,7 +160,6 @@ async def get_audio_url(video_url: str, region: str):
             'socket_timeout': 30,
             'geo_bypass': True,
             'geo_bypass_country': region if region else 'US',
-            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
         }
 
         try:
@@ -183,6 +202,6 @@ async def get_audio_url(video_url: str, region: str):
         return audio_details
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error {str(e)}")
+        raise HTTPException(status_code=400, detail={"detail": str(e), "message": _friendly_error(str(e))})
 
 
