@@ -126,7 +126,7 @@ async def video_info(url, region: str):
 
         return result
     except Exception as e:
-        raise ValueError(str(e))
+        raise ValueError(str(e).split('\nTraceback')[0].strip())
 
 
 def extract_youtube_video_id(url: str) -> str:
