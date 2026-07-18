@@ -20,11 +20,11 @@ from app.utils import concurrency
 
 REQUEST_TIMEOUT = int(settings.REQUEST_TIMEOUT)
 
-MAX_QUEUE_THRESHOLD = 7  # reject new tool requests when queue exceeds this
+MAX_QUEUE_THRESHOLD = 3  # reject new tool requests when queue exceeds this
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith("/tools/") and concurrency.downloads_queued >= MAX_QUEUE_THRESHOLD:
+        if request.url.path.startswith("/tools/social") and concurrency.downloads_queued >= MAX_QUEUE_THRESHOLD:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Server is busy. Please try again in a moment.", "queued": concurrency.downloads_queued}
