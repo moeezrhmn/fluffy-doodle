@@ -20,7 +20,7 @@ from app.utils import concurrency
 
 REQUEST_TIMEOUT = int(settings.REQUEST_TIMEOUT)
 
-MAX_QUEUE_THRESHOLD = 10  # reject new tool requests when queue exceeds this
+MAX_QUEUE_THRESHOLD = 7  # reject new tool requests when queue exceeds this
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
