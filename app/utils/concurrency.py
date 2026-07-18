@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-MAX_CONCURRENT_DOWNLOADS = 3  # 4-core AMD EPYC — reserve 1 core for event loop
+MAX_CONCURRENT_DOWNLOADS = 2  # 4-core AMD EPYC — reserve 1 core for event loop
 
 _download_semaphore: asyncio.Semaphore | None = None
 

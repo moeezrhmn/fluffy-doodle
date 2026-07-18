@@ -29,10 +29,10 @@ def _friendly_error(raw: str) -> str:
 
 
 async def download_video(video_url: str, region: str):
-    """Get YouTube video information - tries fast method first, falls back to yt-dlp"""
     try:
         video_id = extract_youtube_video_id(video_url)
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        if video_id:
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         v_info = await video_info(video_url, region)
         return v_info
@@ -40,7 +40,8 @@ async def download_video(video_url: str, region: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail={"detail": str(e), "message": _friendly_error(str(e))})
+        msg = re.sub(r'\x1b\[[0-9;]*m', '', str(e)).split('\nTraceback')[0].strip()
+        raise HTTPException(status_code=400, detail={"detail": msg, "message": _friendly_error(msg)})
 
 
 async def video_info(url, region: str):
@@ -59,6 +60,7 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
+            'remote_components': ['ejs:github'],
         }
 
         try:
@@ -129,12 +131,10 @@ async def video_info(url, region: str):
         raise ValueError(str(e).split('\nTraceback')[0].strip())
 
 
-def extract_youtube_video_id(url: str) -> str:
+def extract_youtube_video_id(url: str) -> str | None:
     pattern = r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,12})'
     match = re.search(pattern, url)
-    if match:
-        return match.group(1)
-    raise ValueError(f"Invalid YouTube URL: could not extract video ID from '{url}'")
+    return match.group(1) if match else None
 
 
 
@@ -148,9 +148,6 @@ async def get_audio_url(video_url: str, region: str):
         if cached_data:
             return cached_data
         
-        video_id = extract_youtube_video_id(video_url)
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
         options = {
             "format": "bestaudio/best",
             "noplaylist": True,
@@ -160,6 +157,7 @@ async def get_audio_url(video_url: str, region: str):
             'socket_timeout': 30,
             'geo_bypass': True,
             'geo_bypass_country': region if region else 'US',
+            'remote_components': ['ejs:github'],
         }
 
         try:
@@ -202,6 +200,7 @@ async def get_audio_url(video_url: str, region: str):
         return audio_details
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail={"detail": str(e), "message": _friendly_error(str(e))})
+        msg = re.sub(r'\x1b\[[0-9;]*m', '', str(e)).split('\nTraceback')[0].strip()
+        raise HTTPException(status_code=400, detail={"detail": msg, "message": _friendly_error(msg)})
 
 
