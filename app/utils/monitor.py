@@ -38,7 +38,11 @@ def request_started(path: str, method: str, region: str, video_url: str, req_id:
     try:
         _r.incr(ACTIVE_KEY)
         _r.hincrby(STATS_KEY, "total", 1)
-        _r.hsetnx(STATS_KEY, "start_time", time.time())
+        if _r.hsetnx(STATS_KEY, "start_time", time.time()):
+            # New stats window — expire the whole key after 2 days so it resets automatically
+            _r.expire(STATS_KEY, 172800)
+            for pk in _r.keys(PATH_PREFIX + "*"):
+                _r.expire(pk, 172800)
     except Exception as e:
         print(f"[monitor] Redis error: {e}")
     _set_request_id(req_id)

@@ -23,6 +23,8 @@ def _friendly_error(raw: str) -> str:
         return "This video is unavailable or region-restricted."
     if "private video" in msg:
         return "This video is private and cannot be downloaded."
+    if "no audio-only stream available" in msg or "sabr" in msg:
+        return "Audio-only stream is not available for this video right now. Try a different region."
     if "invalid youtube url" in msg:
         return raw
     return "Failed to retrieve video information. The video may be unavailable or restricted."
@@ -60,7 +62,9 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'extractor_args': {'youtube': {'player_client': ['ios', 'android']}},
+            # 'extractor_args': {'youtube': {'player_client': ['web', 'android']}},
+            'js_runtimes': {'deno': {}},
+            'remote_components': ['ejs:npm'],
         }
 
         try:
@@ -155,7 +159,10 @@ async def get_audio_url(video_url: str, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'extractor_args': {'youtube': {'player_client': ['ios', 'android']}},
+            'geo_bypass': True,
+            'geo_bypass_country': region if region else 'US',
+            'js_runtimes': {'deno': {}},
+            'remote_components': ['ejs:npm'],
         }
 
         try:
@@ -190,7 +197,7 @@ async def get_audio_url(video_url: str, region: str):
             "thumbnail": info.get("thumbnail"),
             'audio_url': audio_url,
             'download_url': audio_url,
-            'http_headers': http_headers,  # Required headers
+            'http_headers': http_headers,
             'warning': 'Audio URL expires in 5-6 hours. Use http_headers when accessing.',
             'webpage_url': info.get('webpage_url')
         }
