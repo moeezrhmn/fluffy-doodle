@@ -60,7 +60,7 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'remote_components': ['ejs:github'],
+            'extractor_args': {'youtube': {'player_client': ['ios', 'android']}},
         }
 
         try:
@@ -155,9 +155,7 @@ async def get_audio_url(video_url: str, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'geo_bypass': True,
-            'geo_bypass_country': region if region else 'US',
-            'remote_components': ['ejs:github'],
+            'extractor_args': {'youtube': {'player_client': ['ios', 'android']}},
         }
 
         try:
