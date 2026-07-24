@@ -1,6 +1,7 @@
 import re
 import json
 import asyncio
+import httpx
 from fastapi import HTTPException
 from app import config as app_config
 from app.utils.cache import cache
@@ -15,10 +16,14 @@ def _friendly_error(raw: str) -> str:
         return "This video is age-restricted and cannot be downloaded without authentication."
     if "sign in to confirm you're not a bot" in msg or "not a bot" in msg:
         return "YouTube is blocking this request as a bot. Try a different region or try again later."
+    if "members" in msg and ("channel" in msg or "join" in msg or "level" in msg):
+        return "This video is members-only and cannot be downloaded."
     if "account associated with this video has been terminated" in msg:
         return "This video is unavailable — the YouTube account has been terminated."
     if "this video is no longer available" in msg:
         return "This video is no longer available."
+    if "unavailable in this country" in msg or "government" in msg or "not made this video available in your country" in msg:
+        return "This video is blocked in your region and cannot be downloaded."
     if "video unavailable" in msg or "this video is not available" in msg:
         return "This video is unavailable or region-restricted."
     if "private video" in msg:
@@ -28,6 +33,29 @@ def _friendly_error(raw: str) -> str:
     if "invalid youtube url" in msg:
         return raw
     return "Failed to retrieve video information. The video may be unavailable or restricted."
+
+
+async def _pre_check_video(video_id: str) -> None:
+    """Fast oEmbed pre-check — catches age-restricted, members-only, private, deleted before running yt-dlp."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+            )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=400, detail={
+                "detail": "Video requires authentication",
+                "message": "This video is private, age-restricted, or members-only and cannot be downloaded."
+            })
+        if resp.status_code == 404:
+            raise HTTPException(status_code=400, detail={
+                "detail": "Video not found",
+                "message": "This video does not exist or has been deleted."
+            })
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # pre-check failure is non-fatal — yt-dlp will handle it
 
 
 async def download_video(video_url: str, region: str):
@@ -43,18 +71,22 @@ async def download_video(video_url: str, region: str):
         raise
     except Exception as e:
         msg = re.sub(r'\x1b\[[0-9;]*m', '', str(e)).split('\nTraceback')[0].strip()
-        raise HTTPException(status_code=400, detail={"detail": msg, "message": _friendly_error(msg)})
+        raise Exception(_friendly_error(msg) if _friendly_error(msg) else msg)
 
 
 async def video_info(url, region: str):
     """Get video information using yt-dlp command line tool"""
     try:
         cache_key = cache.make_key("youtube_video", url, region)
-        
+
         cached_data = cache.get(cache_key)
         if cached_data:
             return cached_data
-        
+
+        video_id = extract_youtube_video_id(url)
+        if video_id:
+            await _pre_check_video(video_id)
+
         options = {
             "listformats": True,
             "noplaylist": True,
@@ -62,7 +94,7 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            # 'extractor_args': {'youtube': {'player_client': ['web', 'android']}},
+            'extractor_args': {'youtube': {'player_client': ['tv_embedded']}},
             'js_runtimes': {'deno': {}},
             'remote_components': ['ejs:npm'],
         }
@@ -206,6 +238,6 @@ async def get_audio_url(video_url: str, region: str):
 
     except Exception as e:
         msg = re.sub(r'\x1b\[[0-9;]*m', '', str(e)).split('\nTraceback')[0].strip()
-        raise HTTPException(status_code=400, detail={"detail": msg, "message": _friendly_error(msg)})
+        raise Exception(_friendly_error(msg) if _friendly_error(msg) else msg)
 
 

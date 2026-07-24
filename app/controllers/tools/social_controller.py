@@ -45,7 +45,9 @@ async def instagram_download(request: Request, auth_data: dict = Depends(authori
     
         return await instagram_service.download_video(url, request)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
+            tb = traceback.format_exc()
+            print('Error:[instagram] ' , (e) , '\n ' , tb)
+            raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 
 # Youtube videos download
@@ -56,7 +58,7 @@ async def youtube_download(request: YoutubeURLRequest, auth_data: dict = Depends
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[youtube] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 # Youtube videos download
 @router.post("/tools/social/youtube/audio-download")
@@ -66,8 +68,8 @@ async def youtube_audio_download( request: YoutubeURLRequest,  auth_data: dict =
         return await youtube_service.get_audio_url(request.url, request.region)
     except Exception as e:
         tb = traceback.format_exc()
-        print('Error:[youtube_audio] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        print('Error:[youtube_audio] ' , (e) , '\n\n\n TRACEBACK ' , tb)
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 
 # Facebook videos download
@@ -85,7 +87,7 @@ async def facebook_dowbload(request: Request, auth_data: dict = Depends(authoriz
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[facebook] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 
 
@@ -101,7 +103,7 @@ async def facebook_dowbload(request: Request, auth_data: dict = Depends(authoriz
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[X(twitter)] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 
 # VK videos download
@@ -116,7 +118,7 @@ async def vk_dowbload(request: Request, auth_data: dict = Depends(authorize_user
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[VK platform] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
 
 
@@ -167,5 +169,5 @@ async def tiktok_download(request: TikTokVideoRequest, http_request: Request, au
     except Exception as e:
         tb = traceback.format_exc()
         print('Error:[tiktok] ' , (e) , '\n ' , tb)
-        raise HTTPException(status_code=400, detail=f"Error: {str(e)}\nTraceback: {tb}")
+        raise HTTPException(status_code=400, detail={"message": str(e), 'traceback': str(tb)})
 
