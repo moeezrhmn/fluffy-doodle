@@ -150,7 +150,7 @@ The application follows a clean layered architecture pattern:
 - `INSTAGRAM_USERNAME_2`, `INSTAGRAM_PASSWORD_2`: Additional account
 - `INSTAGRAM_USERNAME_3`, `INSTAGRAM_PASSWORD_3`: Additional account
 - Pattern continues: `USERNAME_4`, `USERNAME_5`, etc.
-- See [INSTAGRAM_SETUP.md](INSTAGRAM_SETUP.md) for complete setup guide
+- See [docs/INSTAGRAM_SETUP.md](docs/INSTAGRAM_SETUP.md) for complete setup guide
 
 ### Important Implementation Notes
 

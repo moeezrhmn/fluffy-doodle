@@ -1,15 +1,16 @@
-import asyncio
 import os
 import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import aiofiles
 import ffmpeg
+from starlette.concurrency import run_in_threadpool
 
 from app import config as app_config
+from app.utils.job_queue import JobStatus, RedisJobQueue
 
 TEMP_DIR = "/tmp/multsaver"
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
@@ -23,12 +24,6 @@ PRESETS = {
     "email":    {"target_mb": 10, "scale": "854:480",  "audio_kbps": 96},
 }
 
-class JobStatus:
-    QUEUED     = "queued"
-    PROCESSING = "processing"
-    DONE       = "done"
-    ERROR      = "error"
-
 
 @dataclass
 class Job:
@@ -40,10 +35,6 @@ class Job:
     status: str = JobStatus.QUEUED
     error: Optional[str] = None
     download_url: Optional[str] = None
-
-
-jobs: Dict[str, Job] = {}
-_queue: asyncio.Queue = asyncio.Queue()
 
 
 def cleanup(*paths: str) -> None:
@@ -106,28 +97,20 @@ def _run_ffmpeg(input_path: str, output_path: str, preset: str, target_mb: Optio
             pass
 
 
-async def _worker() -> None:
-    while True:
-        job: Job = await _queue.get()
-        job.status = JobStatus.PROCESSING
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None, _run_ffmpeg, job.input_path, job.output_path, job.preset, job.target_mb
-            )
-            job.status = JobStatus.DONE
-            cleanup(job.input_path)  # input no longer needed after compression
-        except Exception as e:
-            job.status = JobStatus.ERROR
-            job.error = str(e)
-            print(f"[compress] Error for job {job.job_id}:\n{e}")
-            cleanup(job.input_path, job.output_path)
-        finally:
-            _queue.task_done()
+async def _process(job: Job) -> None:
+    try:
+        await run_in_threadpool(_run_ffmpeg, job.input_path, job.output_path, job.preset, job.target_mb)
+        cleanup(job.input_path)  # input no longer needed after compression
+    except Exception:
+        cleanup(job.input_path, job.output_path)
+        raise
+
+
+queue = RedisJobQueue(name="video_compress", job_class=Job, process=_process, num_workers=NUM_WORKERS)
 
 
 def start_workers() -> None:
-    for _ in range(NUM_WORKERS):
-        asyncio.create_task(_worker())
+    queue.start_workers()
 
 
 async def enqueue(content: bytes, preset: str, target_mb: Optional[int], base_url: str) -> Job:
@@ -150,26 +133,20 @@ async def enqueue(content: bytes, preset: str, target_mb: Optional[int], base_ur
         target_mb=target_mb,
         download_url=download_url,
     )
-    jobs[job_id] = job
-    await _queue.put(job)
+    await queue.enqueue(job)
     return job
 
 
 def get_job(job_id: str) -> Optional[Job]:
-    return jobs.get(job_id)
+    return queue.get_job(job_id)
 
 
 def queue_position(job_id: str) -> int:
-    pos = 0
-    for jid, job in jobs.items():
-        if jid == job_id:
-            return pos + 1
-        if job.status == JobStatus.QUEUED:
-            pos += 1
-    return 0
+    return queue.queue_position(job_id)
 
 
 def remove_job(job_id: str) -> None:
-    job = jobs.pop(job_id, None)
+    job = queue.get_job(job_id)
+    queue.remove_job(job_id)
     if job:
         cleanup(job.input_path, job.output_path)

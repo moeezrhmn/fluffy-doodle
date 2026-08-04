@@ -1,14 +1,14 @@
-import asyncio
 import os
 import subprocess
 import uuid
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import aiofiles
-import ffmpeg
+from starlette.concurrency import run_in_threadpool
 
 from app import config as app_config
+from app.utils.job_queue import JobStatus, RedisJobQueue
 
 TEMP_DIR = "/tmp/multsaver"
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
@@ -31,13 +31,6 @@ AAC_QUALITY = {
 }
 
 
-class JobStatus:
-    QUEUED     = "queued"
-    PROCESSING = "processing"
-    DONE       = "done"
-    ERROR      = "error"
-
-
 @dataclass
 class AudioJob:
     job_id: str
@@ -48,10 +41,6 @@ class AudioJob:
     status: str = JobStatus.QUEUED
     error: Optional[str] = None
     download_url: Optional[str] = None
-
-
-jobs: Dict[str, AudioJob] = {}
-_queue: asyncio.Queue = asyncio.Queue()
 
 
 def cleanup(*paths: str) -> None:
@@ -80,28 +69,20 @@ def _run_extraction(input_path: str, output_path: str, fmt: str, quality: str) -
         _ffmpeg(["-i", input_path, "-vn", "-c:a", "pcm_s16le", output_path])
 
 
-async def _worker() -> None:
-    while True:
-        job: AudioJob = await _queue.get()
-        job.status = JobStatus.PROCESSING
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None, _run_extraction, job.input_path, job.output_path, job.format, job.quality
-            )
-            job.status = JobStatus.DONE
-            cleanup(job.input_path)
-        except Exception as e:
-            job.status = JobStatus.ERROR
-            job.error = str(e)
-            print(f"[audio] Error for job {job.job_id}:\n{e}")
-            cleanup(job.input_path, job.output_path)
-        finally:
-            _queue.task_done()
+async def _process(job: AudioJob) -> None:
+    try:
+        await run_in_threadpool(_run_extraction, job.input_path, job.output_path, job.format, job.quality)
+        cleanup(job.input_path)
+    except Exception:
+        cleanup(job.input_path, job.output_path)
+        raise
+
+
+queue = RedisJobQueue(name="audio", job_class=AudioJob, process=_process, num_workers=NUM_WORKERS)
 
 
 def start_workers() -> None:
-    for _ in range(NUM_WORKERS):
-        asyncio.create_task(_worker())
+    queue.start_workers()
 
 
 async def enqueue(content: bytes, fmt: str, quality: str, base_url: str) -> AudioJob:
@@ -125,26 +106,20 @@ async def enqueue(content: bytes, fmt: str, quality: str, base_url: str) -> Audi
         quality=quality,
         download_url=download_url,
     )
-    jobs[job_id] = job
-    await _queue.put(job)
+    await queue.enqueue(job)
     return job
 
 
 def get_job(job_id: str) -> Optional[AudioJob]:
-    return jobs.get(job_id)
+    return queue.get_job(job_id)
 
 
 def queue_position(job_id: str) -> int:
-    pos = 0
-    for jid, job in jobs.items():
-        if jid == job_id:
-            return pos + 1
-        if job.status == JobStatus.QUEUED:
-            pos += 1
-    return 0
+    return queue.queue_position(job_id)
 
 
 def remove_job(job_id: str) -> None:
-    job = jobs.pop(job_id, None)
+    job = queue.get_job(job_id)
+    queue.remove_job(job_id)
     if job:
         cleanup(job.input_path, job.output_path)
