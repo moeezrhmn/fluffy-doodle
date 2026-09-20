@@ -7,6 +7,8 @@ FastAPI backend: social media downloaders, PDF tools, plagiarism detection, temp
 Supplementary docs live in [`docs/`](docs/):
 
 - [`docs/PDF_TOOLS_API.md`](docs/PDF_TOOLS_API.md) — API integration guide for the PDF tools (`/tools/pdf/*`), for whoever is wiring up the frontend/client side.
+- [`docs/TOOLS-ROADMAP.md`](docs/TOOLS-ROADMAP.md) — full PDF tools inventory (organized by competitor-style category) with live/planned/gap status per tool. Mirrored from `filemutate/TOOLS-ROADMAP.md` — keep both in sync when either changes.
+- [`docs/COMPRESS_TARGET_SIZE_PLAN.md`](docs/COMPRESS_TARGET_SIZE_PLAN.md) — plan for adding an optional exact-target-size input to Compress (not yet implemented).
 - [`docs/INSTAGRAM_SETUP.md`](docs/INSTAGRAM_SETUP.md) — Instagram account rotation setup.
 - [`docs/BGUTIL_SERVER_SETUP.md`](docs/BGUTIL_SERVER_SETUP.md), [`docs/YOUTUBE_YTDLP_NOTES.md`](docs/YOUTUBE_YTDLP_NOTES.md) — YouTube/yt-dlp notes.
 - [`docs/VIDEO_COMPRESSOR_API.md`](docs/VIDEO_COMPRESSOR_API.md) — video compress/trim/audio-extract API notes.

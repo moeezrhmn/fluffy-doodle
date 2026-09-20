@@ -8,21 +8,36 @@ YouTube deployed two major changes in 2024-2025:
 
 ## Client Status
 
+Client names are not stable across yt-dlp releases. An unknown name is **not an error** — yt-dlp logs `WARNING: [youtube] Skipping unsupported client "<name>"` and silently falls back to its defaults (currently `visionos`, `web`), which return DASH-only formats. Check the live list before trusting anything below:
+
+```bash
+python3 -c "from yt_dlp.extractor.youtube import _base as b; print(list(b.INNERTUBE_CLIENTS))"
+```
+
 | Client | Status | Notes |
 |---|---|---|
-| `web` | ✅ Works | Needs EJS solver 0.8.0 + Deno. Best DASH audio/video. |
-| `android` | ⚠️ Limited | SABR experiment strips DASH URLs. Only returns format 18 (360p combined). |
+| `android`, `mweb`, `tv_simply` | ✅ Used by `video_info` | Each still serves format 18 (360p combined) — the only muxed format left, and the only kind `video_info`'s filter keeps. |
+| `web` | ✅ Works | Needs EJS solver 0.8.0 + Deno. Best DASH audio/video, but DASH is video-only/audio-only — no muxed format. |
+| `tv_embedded` | ❌ Removed | Gone as of yt-dlp 2026.08.19. Was the configured client; its removal is what emptied `available_formats`. |
 | `tv` | ❌ Avoid | DRM experiment (issue #12563) returns only storyboard images. |
 | `ios` | ❌ Avoid | Requires GVS PO Token. Also ignores cookies silently. |
 | `android_music` | ❌ Unsupported | Current yt-dlp skips it. |
 
-## Current Config (video_info + get_audio_url)
+## Current Config
+
+`video_info` ([app/services/tools/socials/youtube_service.py](../app/services/tools/socials/youtube_service.py)):
 
 ```python
-'extractor_args': {'youtube': {'player_client': ['web', 'android']}},
-'js_runtimes': {'deno': {}},        # dict format required
-'remote_components': ['ejs:github'], # list format required — string breaks it
+'extractor_args': {'youtube': {'player_client': ['android', 'mweb', 'tv_simply']}},
+'js_runtimes': {'deno': {}},      # dict format required
+'remote_components': ['ejs:npm'], # list format required — string breaks it
 ```
+
+`get_audio_url` sets no `player_client` and runs on yt-dlp's defaults, which is fine — it wants audio-only DASH, which the defaults do return.
+
+## The muxed-format constraint
+
+`video_info` filters to formats with `audio_channels is not None` and a real resolution — i.e. progressive/muxed only — because the endpoint hands back a single direct URL and never merges anything server-side. YouTube now serves exactly one such format (18, 360p) and only on some clients. If YouTube drops format 18 entirely, this endpoint cannot be fixed by swapping clients; it would need to either return separate video+audio URLs (a breaking change for callers) or download and mux with ffmpeg into a Lane B job.
 
 ## Required Server Setup
 

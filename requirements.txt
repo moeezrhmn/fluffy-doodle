@@ -207,7 +207,7 @@ wheel==0.45.1
 WMI==1.4.9
 wrapt==2.3.0
 yarl==1.20.0
-yt-dlp==2026.7.4
+yt-dlp==2026.8.19
 yt-dlp-ejs==0.8.0
 zope.interface==7.2
 aiofiles==23.2.1

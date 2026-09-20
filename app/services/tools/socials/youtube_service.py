@@ -94,7 +94,7 @@ async def video_info(url, region: str):
             'skip_download': True,
             'legacy_server_connect': True,
             'socket_timeout': 30,
-            'extractor_args': {'youtube': {'player_client': ['tv_embedded']}},
+            'extractor_args': {'youtube': {'player_client': ['android', 'mweb', 'tv_simply']}},
             'js_runtimes': {'deno': {}},
             'remote_components': ['ejs:npm'],
         }
